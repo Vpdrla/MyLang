@@ -1,0 +1,36 @@
+# 1부터 인덱스, 중첩, 내장함수, 참조 vs copy
+let xs = [10, 20, 30]
+print xs[1], xs[3], len(xs)
+xs[2] = 99
+xs[2] += 1
+print xs
+
+let grid = [[1, 2], [3, 4]]
+grid[1][2] = 7
+print grid
+
+push(xs, 40)
+print "push:", xs
+print "pop:", pop(xs), xs
+let ys = [3, 1, 2]
+sort(ys)
+print "sort:", ys
+remove(ys, 2)
+print "remove:", ys
+
+let d = {"이름": "성윤", "나이": 15}
+d["학교"] = "중학교"
+d["나이"] += 1
+print d["이름"], d["나이"], len(d)
+print "keys:", keys(d), "has:", has(d, "이름"), has(d, "없음")
+remove(d, "학교")
+print d
+
+# 참조 방식 vs 깊은 복사
+let a = [1, [2, 3]]
+let b = a
+b[1] = 99
+print "참조:", a
+let c = copy(a)
+c[2][1] = 77
+print "copy 후 원본:", a, "복사본:", c

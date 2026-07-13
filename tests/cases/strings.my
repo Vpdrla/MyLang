@@ -1,0 +1,15 @@
+# UTF-8 글자 단위 처리 + 문자열 내장함수
+let s = "안녕하세요"
+print len(s), s[1], s[5]
+let e = "hello"
+print upper(e), lower("WORLD")
+print find("바나나", "나"), find("바나나", "없음")
+print replace("aXbXc", "X", "-")
+print substr("가나다라마", 2, 3)
+let parts = split("a,b,c", ",")
+print parts, len(parts)
+print join(parts, "-")
+print num("15") + 1, str(3) + "번"
+
+# 문자열 비교
+print "abc" == "abc", "a" < "b", "가" != "나"

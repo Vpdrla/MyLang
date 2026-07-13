@@ -1,0 +1,22 @@
+# v1.5 버그 수정 회귀 테스트
+# B1: 자기 자신을 담은 구조 print → 크래시 대신 잡을 수 있는 에러
+let a = [1, 2]
+push(a, a)
+try { print a } catch e { print "B1:", e }
+let d = {"x": 1}
+d["self"] = d
+try { print d } catch e { print "B1d:", e }
+try { let s = "값: " + a } catch e { print "B1s:", e }
+print "B1 후 정상 진행"
+
+# B2: 타입이 다르면 ==/!= 는 에러가 아니라 false/true
+print "B2:", 1 == "1", 1 != "1", "quit" == 5, [1] == 1, {"a":1} != "a"
+let 답 = 3
+if 답 == "종료" { print "안 나와야 함" } else { print "B2 분기 OK" }
+
+# B7: 매우 큰 수 출력 (정수 캐스트 범위 밖)
+print "B7:", 9300000000000000000000, -9300000000000000000000
+print "B7 정수:", 42, -17, 3.5
+
+# copy 는 여전히 순환에서 에러
+try { let cp = copy(a) } catch e { print "copy:", e }

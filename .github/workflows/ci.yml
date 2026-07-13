@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (C++17, warnings as errors)
+        run: g++ -std=c++17 -O2 -Wall -Werror -o mylang mylang.cpp
+
+      - name: Syntax check (C++20)
+        run: g++ -std=c++20 -O2 -fsyntax-only mylang.cpp
+
+      - name: Differential tests (interpreter vs transpiled binary)
+        run: tests/run_tests.sh

@@ -1,0 +1,20 @@
+# 재귀, 호이스팅, 전역/지역, return 생략 시 0
+print "호이스팅:", 두배(21)   # 정의보다 위에서 호출
+
+func 두배(n) { return n * 2 }
+
+func fib(n) {
+    if n <= 2 then { return 1 }
+    return fib(n - 1) + fib(n - 2)
+}
+for i = 1 to 12 { print "fib(" + i + ") =", fib(i) }
+
+let 전역 = 100
+func 전역쓰기() { 전역 += 1 }
+func 지역만들기() { let 전역 = 0  전역 = 55 }
+전역쓰기()
+지역만들기()
+print "전역:", 전역
+
+func 반환없음() { let t = 1 }
+print "반환없음:", 반환없음()
