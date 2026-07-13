@@ -64,7 +64,7 @@ tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프
 - [x] LICENSE 추가 (MIT)
 - [x] 테스트 스위트 + CI (tests/run_tests.sh + GitHub Actions)
 - [x] MYLANG_SPEC.en.md, README.ko.md, examples/rpg.my, vscode-mylang/ 추가 (README 깨진 링크 해소)
-- [ ] README용 데모 GIF (셸 → RPG → build 30초)
+- [x] README 데모 (애니메이션 SVG — 셸 → RPG → build 26초, docs/demo.svg)
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
 - [x] 문자열 보간 `"이름: {x}"`, 리스트 `==`(깊은 비교)/`+`(연결) — v1.6
