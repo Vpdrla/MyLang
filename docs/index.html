@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MyLang Playground — try it in your browser</title>
 <meta name="description" content="MyLang: a pseudocode-style programming language. Run it right here in your browser (WebAssembly).">
+<meta property="og:type" content="website">
+<meta property="og:title" content="MyLang Playground — try it in your browser">
+<meta property="og:description" content="A pseudocode-style programming language with a dual backend (interpreter + C++ transpiler). Runs entirely in your browser via WebAssembly — no install needed.">
+<meta property="og:url" content="https://vpdrla.github.io/MyLang/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="MyLang Playground — try it in your browser">
+<meta name="twitter:description" content="A pseudocode-style programming language. Runs entirely in your browser via WebAssembly — no install needed.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>▶</text></svg>">
 <style>
   :root {
     --bg: #16181d; --panel: #1e2128; --panel2: #22262e;
@@ -83,7 +91,7 @@
     <option value="guess">Game: 숫자 맞히기 (input)</option>
     <option value="rpg">Game: 던전 오브 마이랭 (RPG)</option>
   </select>
-  <span class="hint">input uses a dialog · import is not available on the web · 무한 루프는 탭을 멈출 수 있어요</span>
+  <span class="hint">input uses a dialog · import is not available on the web · 파일 저장(writefile)은 새로고침하면 사라져요</span>
 </div>
 
 <main>
@@ -96,7 +104,7 @@
       <span>output</span>
       <button id="clearBtn">clear</button>
     </div>
-    <div id="output"><span class="hint">loading MyLang… (~350KB)</span></div>
+    <div id="output"><span class="hint">loading MyLang… (~370KB)</span></div>
   </div>
 </main>
 
