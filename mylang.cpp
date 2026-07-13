@@ -1,26 +1,9 @@
 // ============================================================
-//  mylang.cpp — 나만의 언어 인터프리터 + CLI 셸  (v0.7)
+//  mylang.cpp — MyLang v1.5
+//  인터프리터 + C++ 트랜스파일러 + CLI 셸 + REPL + WASM
 //
 //  빌드:  g++ -std=c++17 -O2 -o mylang mylang.cpp   (C++20도 OK)
-//
-//  셸 명령어:
-//    create <파일이름> / choose <파일이름> / code / show / run
-//    list / clear / help / exit
-//
-//  v0.7 변경:
-//    [버그 수정]
-//    - "1.2.3" 같은 잘못된 숫자, "12ab" 같은 숫자+글자 → 렉서 에러
-//    - 리스트 인덱스가 정수가 아니면 에러 (xs[1.5] 조용히 통과하던 것)
-//    - % 연산이 소수도 정확하게 (fmod)
-//    - 함수 호이스팅: 정의보다 위에서 호출 가능
-//    - 무한 재귀 → 세그폴트 대신 깔끔한 에러 (깊이 제한 2000)
-//    - for 루프 변수가 항상 현재 스코프의 지역 변수 (재귀 시 공유 버그 수정)
-//    - input 입력값 앞뒤 공백 제거
-//    [새 기능]
-//    - 문자열 이스케이프: \n \t \" 백슬래시
-//    - 복합 대입: += -= *= /=
-//    - print 여러 값: print "x =", x
-//    - 내장 함수 추가: abs floor ceil sqrt min max pop sort
+//  언어 명세: MYLANG_SPEC.md / MYLANG_SPEC.en.md
 // ============================================================
 
 #include <iostream>
@@ -585,14 +568,17 @@ struct Value {
         if (kind == OBJ)  return true;                // 객체는 항상 참
         return list && !list->empty();
     }
-    string toString() const {
+    string toString(int depth = 0) const {
         if (kind == STR) return str;
+        // 자기 자신을 담은 리스트/딕셔너리는 무한 재귀 → deepCopy 와 같은 한도로 차단
+        if (depth > 1000)
+            throw LangError("출력할 수 없습니다 (자기 자신을 포함한 구조?)");
         if (kind == LIST) {
             string out = "[";
             for (size_t i = 0; i < list->size(); i++) {
                 if (i) out += ", ";
                 Value& e = (*list)[i];
-                out += (e.kind == STR) ? "\"" + e.str + "\"" : e.toString();
+                out += (e.kind == STR) ? "\"" + e.str + "\"" : e.toString(depth + 1);
             }
             return out + "]";
         }
@@ -603,7 +589,7 @@ struct Value {
                 if (!first) out += ", ";
                 first = false;
                 out += "\"" + k + "\": ";
-                out += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString();
+                out += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString(depth + 1);
             }
             return out + "}";
         }
@@ -614,11 +600,12 @@ struct Value {
                 if (!first) out += ", ";
                 first = false;
                 out += "\"" + k + "\": ";
-                out += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString();
+                out += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString(depth + 1);
             }
             return out + "}";
         }
-        if (num == (long long)num) return std::to_string((long long)num);
+        if (std::fabs(num) < 9.0e18 && num == (long long)num)
+            return std::to_string((long long)num);
         std::ostringstream os; os << num; return os.str();
     }
     string kindName() const {
@@ -760,6 +747,9 @@ static Value applyBin(Tok op, const Value& a, const Value& b, int line) {
     };
     if (op == Tok::PLUS && (a.kind == Value::STR || b.kind == Value::STR))
         return Value::text(a.toString() + b.toString());
+    // 타입이 다르면 ==/!= 는 에러 대신 false/true (예: input 이 숫자로 바꾼 값과 "quit" 비교)
+    if ((op == Tok::EQ || op == Tok::NEQ) && a.kind != b.kind)
+        return Value::number(op == Tok::NEQ ? 1 : 0);
     auto cmp = [&](auto f) {
         if (a.kind == Value::LIST || b.kind == Value::LIST
          || a.kind == Value::MAP  || b.kind == Value::MAP
@@ -820,11 +810,12 @@ struct BinExpr : Expr {
     }
 };
 struct NegExpr : Expr {
-    ExprP inner;
-    NegExpr(ExprP e) : inner(std::move(e)) {}
+    ExprP inner; int line;
+    NegExpr(ExprP e, int l) : inner(std::move(e)), line(l) {}
     Value eval(Env& env) override {
         Value v = inner->eval(env);
-        if (v.kind != Value::NUM) throw LangError(v.kindName() + "에는 - 를 붙일 수 없습니다");
+        if (v.kind != Value::NUM)
+            throw LangError(lineTag(line) + v.kindName() + "에는 - 를 붙일 수 없습니다");
         return Value::number(-v.num);
     }
 };
@@ -1022,13 +1013,18 @@ struct TryStmt : Stmt {
 struct WhileStmt : Stmt {
     ExprP cond; StmtP body;
     void exec(Env& env) override {
+#ifdef MYLANG_WASM
+        // 웹에선 무한 루프가 탭을 얼리므로 상한 유지. 네이티브는 상한 없음 (빌드본과 동작 일치)
         long long guard = 0;
+#endif
         while (cond->eval(env).truthy()) {
             try { body->exec(env); }
             catch (ContinueSignal&) {}
             catch (BreakSignal&)    { break; }
+#ifdef MYLANG_WASM
             if (++guard > 10'000'000)
                 throw LangError("반복 횟수가 너무 많습니다 (무한 루프?)");
+#endif
         }
     }
 };
@@ -1753,10 +1749,15 @@ struct Parser {
     }
     ExprP parseComparison() {
         ExprP left = parseAddSub();
-        while (check(Tok::EQ) || check(Tok::NEQ) || check(Tok::LT)
-            || check(Tok::GT) || check(Tok::LE)  || check(Tok::GE)) {
+        if (check(Tok::EQ) || check(Tok::NEQ) || check(Tok::LT)
+         || check(Tok::GT) || check(Tok::LE)  || check(Tok::GE)) {
             Token op = advance();
             left = std::make_unique<BinExpr>(op.type, std::move(left), parseAddSub(), op.line);
+            // a < b < c 는 (a<b)<c 로 조용히 오작동하므로 명시적으로 막는다
+            if (check(Tok::EQ) || check(Tok::NEQ) || check(Tok::LT)
+             || check(Tok::GT) || check(Tok::LE)  || check(Tok::GE))
+                throw LangError(lineTag(peek().line)
+                    + "비교 연산은 연결해서 쓸 수 없습니다 (a < b < c 대신 a < b and b < c)");
         }
         return left;
     }
@@ -1777,8 +1778,11 @@ struct Parser {
         return left;
     }
     ExprP parseUnary() {
-        if (match(Tok::MINUS))
-            return std::make_unique<NegExpr>(parseUnary());
+        if (check(Tok::MINUS)) {
+            int line = peek().line;
+            advance();
+            return std::make_unique<NegExpr>(parseUnary(), line);
+        }
         return parsePostfix();
     }
     ExprP parsePostfix() {
@@ -2018,43 +2022,47 @@ struct Value {
         return kind==NUM?"숫자":kind==STR?"문자열":kind==MAP?"딕셔너리"
              : kind==OBJ?"객체":"리스트";
     }
-    string toString() const {
-        if (kind == STR) return str;
-        if (kind == LIST) {
-            string o = "[";
-            for (size_t i = 0; i < list->size(); i++) {
-                if (i) o += ", ";
-                const Value& e = (*list)[i];
-                o += (e.kind == STR) ? "\"" + e.str + "\"" : e.toString();
-            }
-            return o + "]";
-        }
-        if (kind == MAP) {
-            string o = "{"; bool first = true;
-            for (auto& [k, v] : *map) {
-                if (!first) o += ", ";
-                first = false;
-                o += "\"" + k + "\": ";
-                o += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString();
-            }
-            return o + "}";
-        }
-        if (kind == OBJ) {
-            string o = className + "{"; bool first = true;
-            for (auto& [k, v] : *map) {
-                if (!first) o += ", ";
-                first = false;
-                o += "\"" + k + "\": ";
-                o += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString();
-            }
-            return o + "}";
-        }
-        if (num == (long long)num) return std::to_string((long long)num);
-        std::ostringstream os; os << num; return os.str();
-    }
+    string toString(int depth = 0) const;
 };
 using Map = std::map<string, Value>;
 struct RunErr : std::runtime_error { RunErr(const string& m) : std::runtime_error(m) {} };
+string Value::toString(int depth) const {
+    if (kind == STR) return str;
+    if (depth > 1000)
+        throw RunErr("출력할 수 없습니다 (자기 자신을 포함한 구조?)");
+    if (kind == LIST) {
+        string o = "[";
+        for (size_t i = 0; i < list->size(); i++) {
+            if (i) o += ", ";
+            const Value& e = (*list)[i];
+            o += (e.kind == STR) ? "\"" + e.str + "\"" : e.toString(depth + 1);
+        }
+        return o + "]";
+    }
+    if (kind == MAP) {
+        string o = "{"; bool first = true;
+        for (auto& [k, v] : *map) {
+            if (!first) o += ", ";
+            first = false;
+            o += "\"" + k + "\": ";
+            o += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString(depth + 1);
+        }
+        return o + "}";
+    }
+    if (kind == OBJ) {
+        string o = className + "{"; bool first = true;
+        for (auto& [k, v] : *map) {
+            if (!first) o += ", ";
+            first = false;
+            o += "\"" + k + "\": ";
+            o += (v.kind == STR) ? "\"" + v.str + "\"" : v.toString(depth + 1);
+        }
+        return o + "}";
+    }
+    if (std::fabs(num) < 9.0e18 && num == (long long)num)
+        return std::to_string((long long)num);
+    std::ostringstream os; os << num; return os.str();
+}
 static bool truthy(const Value& v) { return v.truthyV(); }
 static std::vector<string> u8chars(const string& s) {
     std::vector<string> out; size_t i = 0;
@@ -2091,23 +2099,32 @@ static double needNum(const Value& v, const char* what) {
     if (v.kind != Value::NUM) throw RunErr(string(what) + ": 숫자가 필요합니다 (지금: " + v.kindName() + ")");
     return v.num;
 }
+// 산술 이항 연산의 타입 검사 — 인터프리터와 동일한 에러 문구
+static void needNums(const Value& a, const Value& b) {
+    if (a.kind != Value::NUM || b.kind != Value::NUM)
+        throw RunErr(a.kindName() + "와(과) " + b.kindName() + "는 이 연산이 안 됩니다");
+}
 static Value vadd(const Value& a, const Value& b) {
     if (a.kind == Value::STR || b.kind == Value::STR) return Value(a.toString() + b.toString());
-    return Value(needNum(a, "+") + needNum(b, "+"));
+    needNums(a, b);
+    return Value(a.num + b.num);
 }
-static Value vsub(const Value& a, const Value& b) { return Value(needNum(a,"-") - needNum(b,"-")); }
-static Value vmul(const Value& a, const Value& b) { return Value(needNum(a,"*") * needNum(b,"*")); }
+static Value vsub(const Value& a, const Value& b) { needNums(a, b); return Value(a.num - b.num); }
+static Value vmul(const Value& a, const Value& b) { needNums(a, b); return Value(a.num * b.num); }
 static Value vdiv(const Value& a, const Value& b) {
-    double x = needNum(a,"/"), y = needNum(b,"/");
-    if (y == 0) throw RunErr("0으로 나눌 수 없습니다");
-    return Value(x / y);
+    needNums(a, b);
+    if (b.num == 0) throw RunErr("0으로 나눌 수 없습니다");
+    return Value(a.num / b.num);
 }
 static Value vmod(const Value& a, const Value& b) {
-    double x = needNum(a,"%"), y = needNum(b,"%");
-    if (y == 0) throw RunErr("0으로 나머지 연산을 할 수 없습니다");
-    return Value(std::fmod(x, y));
+    needNums(a, b);
+    if (b.num == 0) throw RunErr("0으로 나머지 연산을 할 수 없습니다");
+    return Value(std::fmod(a.num, b.num));
 }
-static Value vneg(const Value& a) { return Value(-needNum(a, "-")); }
+static Value vneg(const Value& a) {
+    if (a.kind != Value::NUM) throw RunErr(a.kindName() + "에는 - 를 붙일 수 없습니다");
+    return Value(-a.num);
+}
 template<class F> static Value vcmp(const Value& a, const Value& b, F f) {
     if (a.kind == Value::LIST || b.kind == Value::LIST || a.kind == Value::MAP || b.kind == Value::MAP
      || a.kind == Value::OBJ  || b.kind == Value::OBJ)
@@ -2116,8 +2133,9 @@ template<class F> static Value vcmp(const Value& a, const Value& b, F f) {
     bool r = (a.kind == Value::NUM) ? f(a.num, b.num) : f(a.str, b.str);
     return Value(r ? 1.0 : 0.0);
 }
-static Value c_eq(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x==y;}); }
-static Value c_ne(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x!=y;}); }
+// 타입이 다르면 ==/!= 는 에러 대신 false/true (인터프리터와 동일)
+static Value c_eq(const Value&a,const Value&b){ if(a.kind!=b.kind) return Value(0.0); return vcmp(a,b,[](auto x,auto y){return x==y;}); }
+static Value c_ne(const Value&a,const Value&b){ if(a.kind!=b.kind) return Value(1.0); return vcmp(a,b,[](auto x,auto y){return x!=y;}); }
 static Value c_lt(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x< y;}); }
 static Value c_gt(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x> y;}); }
 static Value c_le(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x<=y;}); }
@@ -2535,7 +2553,7 @@ struct CodeGen {
     string genExpr(Expr* e) {
         if (auto* n = dynamic_cast<NumExpr*>(e)) {
             char buf[64];
-            if (n->v == (long long)n->v)
+            if (std::fabs(n->v) < 9.0e18 && n->v == (long long)n->v)
                 snprintf(buf, sizeof buf, "Value(%lld.0)", (long long)n->v);
             else
                 snprintf(buf, sizeof buf, "Value(%.17g)", n->v);   // 1e+06 같은 표기도 유효한 리터럴
@@ -3015,6 +3033,22 @@ void cmdBuild(const string& arg) {
     }
 }
 
+// import 문 존재 검사 — 웹/REPL 은 파일 병합(expandImports)을 거치지 않아
+// 그대로 파싱하면 엉뚱한 문법 에러가 나므로, 미리 잡아 친절하게 알려준다
+static bool containsImport(const string& src) {
+    std::istringstream is(src);
+    string ln;
+    while (std::getline(is, ln)) {
+        string t = trim(ln);
+        if (t.rfind("import", 0) == 0) {
+            string rest = t.substr(6);
+            if (rest.empty() || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '"')
+                return true;
+        }
+    }
+    return false;
+}
+
 #ifdef MYLANG_WASM
 // ============================================================
 //  WASM 진입점 — 웹 플레이그라운드에서 호출
@@ -3028,6 +3062,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void mylang_run(const char* code) {
     for (char c : src) {
         if (c == '\n') { g_srcLines.push_back(cur); cur.clear(); }
         else cur += c;
+    }
+    if (containsImport(src)) {
+        std::cout << "!! 에러: 웹 플레이그라운드에서는 import 를 지원하지 않습니다 (데스크톱 전용)\n";
+        std::cout << std::flush;
+        return;
     }
     try {
         runSource(src);
@@ -3090,6 +3129,11 @@ void cmdRepl() {
             if (!readLine(more)) { depth = 0; break; }
             src += "\n" + more;
             depth += braceDelta(more);
+        }
+
+        if (containsImport(src)) {
+            std::cout << "!! 에러: REPL 에서는 import 를 지원하지 않습니다 (파일 실행에서만 가능)\n";
+            continue;
         }
 
         // 1차: 그대로 파싱. 실패하면 "print (입력)" 으로 재시도 → 값 입력 시 자동 출력
