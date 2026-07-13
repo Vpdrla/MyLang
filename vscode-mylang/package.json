@@ -2,7 +2,7 @@
   "name": "mylang",
   "displayName": "MyLang",
   "description": "Syntax highlighting for the MyLang programming language (.my)",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "publisher": "vpdrla",
   "license": "MIT",
   "repository": {

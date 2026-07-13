@@ -58,7 +58,7 @@ tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프
 - u8string은 C++17/20 타입이 달라서 바이트 복사로 처리 중.
 
 ## 현재 상태 & 남은 작업
-언어 v1.5 완성 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시). 저장소: github.com/Vpdrla/MyLang
+언어 v1.6 완성 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시/문자열 보간/리스트 ==·+). 저장소: github.com/Vpdrla/MyLang
 
 - [x] `docs/` 3개 파일 업로드 — **Pages 설정은 사용자가 직접**: Settings→Pages→main `/docs` → https://vpdrla.github.io/MyLang/ 확인
 - [x] LICENSE 추가 (MIT)
@@ -67,5 +67,6 @@ tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프
 - [ ] README용 데모 GIF (셸 → RPG → build 30초)
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
-- [ ] 다음 언어 기능 후보 (사용자와 상의 후): 문자열 포매팅 `"이름: {x}"`, 리스트 `==`/`+`, 일급 함수, 상속
+- [x] 문자열 보간 `"이름: {x}"`, 리스트 `==`(깊은 비교)/`+`(연결) — v1.6
+- [ ] 다음 언어 기능 후보 (사용자와 상의 후): 일급 함수, 상속, 음수 인덱스/슬라이스
 - [ ] (리네임 확정 시) Mallang — 저장소 rename 후 문서/배너 일괄 치환

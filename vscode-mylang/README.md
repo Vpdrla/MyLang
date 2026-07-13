@@ -8,10 +8,10 @@
 
 ```bash
 # Linux / macOS
-cp -r vscode-mylang ~/.vscode/extensions/mylang-1.5.0
+cp -r vscode-mylang ~/.vscode/extensions/mylang-1.6.0
 
 # Windows (PowerShell)
-Copy-Item -Recurse vscode-mylang $env:USERPROFILE\.vscode\extensions\mylang-1.5.0
+Copy-Item -Recurse vscode-mylang $env:USERPROFILE\.vscode\extensions\mylang-1.6.0
 ```
 
 VS Code를 재시작하면 `.my` 파일에 자동 적용됩니다.

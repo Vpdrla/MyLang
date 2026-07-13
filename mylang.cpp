@@ -1,5 +1,5 @@
 // ============================================================
-//  mylang.cpp — MyLang v1.5
+//  mylang.cpp — MyLang v1.6
 //  인터프리터 + C++ 트랜스파일러 + CLI 셸 + REPL + WASM
 //
 //  빌드:  g++ -std=c++17 -O2 -o mylang mylang.cpp   (C++20도 OK)
@@ -141,7 +141,7 @@ static void clearScreen() { std::cout << "\033[2J\033[3J\033[H" << std::flush; }
 
 static void drawBanner() {
     std::cout << "==========================================\n";
-    std::cout << "  MyLang Shell v1.5  (help 로 도움말)\n";
+    std::cout << "  MyLang Shell v1.6  (help 로 도움말)\n";
     std::cout << "==========================================\n";
 }
 
@@ -740,6 +740,32 @@ struct IndexExpr : Expr {
         return (*t.list)[idx];
     }
 };
+// 깊은 동등 비교 — 리스트/딕셔너리/객체는 내용으로 비교. 같은 것을 가리키면 즉시 참,
+// 서로 다른 순환 구조는 deepCopy/toString 과 같은 깊이 한도로 차단
+static bool deepEquals(const Value& a, const Value& b, int depth, int line) {
+    if (depth > 1000)
+        throw LangError(lineTag(line) + "비교할 수 없습니다 (자기 자신을 포함한 구조?)");
+    if (a.kind != b.kind) return false;
+    if (a.kind == Value::NUM) return a.num == b.num;
+    if (a.kind == Value::STR) return a.str == b.str;
+    if (a.kind == Value::LIST) {
+        if (a.list == b.list) return true;
+        if (a.list->size() != b.list->size()) return false;
+        for (size_t i = 0; i < a.list->size(); i++)
+            if (!deepEquals((*a.list)[i], (*b.list)[i], depth + 1, line)) return false;
+        return true;
+    }
+    // MAP / OBJ
+    if (a.map == b.map) return true;
+    if (a.className != b.className) return false;
+    if (a.map->size() != b.map->size()) return false;
+    auto ia = a.map->begin(), ib = b.map->begin();
+    for (; ia != a.map->end(); ++ia, ++ib) {
+        if (ia->first != ib->first) return false;
+        if (!deepEquals(ia->second, ib->second, depth + 1, line)) return false;
+    }
+    return true;
+}
 // 이항 연산의 실제 처리 — BinExpr 와 원소 복합 대입(xs[i] += ...)이 공유
 static Value applyBin(Tok op, const Value& a, const Value& b, int line) {
     auto err = [&](const string& m) {
@@ -747,9 +773,15 @@ static Value applyBin(Tok op, const Value& a, const Value& b, int line) {
     };
     if (op == Tok::PLUS && (a.kind == Value::STR || b.kind == Value::STR))
         return Value::text(a.toString() + b.toString());
-    // 타입이 다르면 ==/!= 는 에러 대신 false/true (예: input 이 숫자로 바꾼 값과 "quit" 비교)
-    if ((op == Tok::EQ || op == Tok::NEQ) && a.kind != b.kind)
-        return Value::number(op == Tok::NEQ ? 1 : 0);
+    // 리스트 + 리스트 = 이어붙인 새 리스트
+    if (op == Tok::PLUS && a.kind == Value::LIST && b.kind == Value::LIST) {
+        std::vector<Value> xs = *a.list;
+        xs.insert(xs.end(), b.list->begin(), b.list->end());
+        return Value::makeList(std::move(xs));
+    }
+    // ==/!= 는 모든 타입 허용 — 타입이 다르면 false/true, 리스트/딕셔너리/객체는 깊은 비교
+    if (op == Tok::EQ || op == Tok::NEQ)
+        return Value::number((op == Tok::EQ) == deepEquals(a, b, 0, line) ? 1 : 0);
     auto cmp = [&](auto f) {
         if (a.kind == Value::LIST || b.kind == Value::LIST
          || a.kind == Value::MAP  || b.kind == Value::MAP
@@ -760,8 +792,6 @@ static Value applyBin(Tok op, const Value& a, const Value& b, int line) {
         return Value::number(r ? 1 : 0);
     };
     switch (op) {
-        case Tok::EQ:  return cmp([](auto x, auto y) { return x == y; });
-        case Tok::NEQ: return cmp([](auto x, auto y) { return x != y; });
         case Tok::LT:  return cmp([](auto x, auto y) { return x <  y; });
         case Tok::GT:  return cmp([](auto x, auto y) { return x >  y; });
         case Tok::LE:  return cmp([](auto x, auto y) { return x <= y; });
@@ -1823,6 +1853,58 @@ struct Parser {
         }
         return e;
     }
+    // "{식}" 문자열 보간 — "이름: {x}" 를  "" + "이름: " + (x) 연결식으로 디슈가링.
+    // 파스 단계에서 일반 AST 가 되므로 인터프리터/트랜스파일러 양쪽에 자동 적용.
+    // 규칙: {{ 는 진짜 { 하나, } 단독은 그냥 문자.
+    ExprP buildStringExpr(const string& s, int line) {
+        std::vector<ExprP> parts;
+        string lit;
+        size_t i = 0;
+        bool interpolated = false;
+        while (i < s.size()) {
+            char c = s[i];
+            if (c == '{') {
+                if (i + 1 < s.size() && s[i + 1] == '{') { lit += '{'; i += 2; continue; }
+                int depth = 1; size_t j = i + 1;
+                while (j < s.size()) {
+                    if (s[j] == '{') depth++;
+                    else if (s[j] == '}' && --depth == 0) break;
+                    j++;
+                }
+                if (depth != 0)
+                    throw LangError(lineTag(line)
+                        + "문자열 보간의 { 에 짝이 되는 } 가 없습니다 (진짜 { 를 쓰려면 {{)");
+                string inner = s.substr(i + 1, j - i - 1);
+                if (trim(inner).empty())
+                    throw LangError(lineTag(line) + "문자열 보간 {} 안이 비어 있습니다");
+                if (!lit.empty()) { parts.push_back(std::make_unique<StrExpr>(lit)); lit.clear(); }
+                try {
+                    Parser sub(lex(inner));
+                    ExprP e = sub.parseExpr();
+                    if (!sub.check(Tok::END)) throw LangError("남는 토큰");
+                    parts.push_back(std::move(e));
+                } catch (LangError&) {
+                    throw LangError(lineTag(line)
+                        + "문자열 보간 {" + inner + "} 안의 식이 잘못되었습니다");
+                }
+                interpolated = true;
+                i = j + 1;
+                continue;
+            }
+            // }} 는 진짜 } 하나 ({{...}} 대칭 이스케이프). } 단독도 그냥 문자.
+            if (c == '}' && i + 1 < s.size() && s[i + 1] == '}') { lit += '}'; i += 2; continue; }
+            lit += c;
+            i++;
+        }
+        if (!interpolated) return std::make_unique<StrExpr>(lit);
+        if (!lit.empty()) parts.push_back(std::make_unique<StrExpr>(lit));
+        // "" 로 시작해 어떤 조합이든 문자열 연결이 되게 한다 ("{a}{b}" 가 덧셈이 되지 않도록)
+        ExprP out = std::make_unique<StrExpr>("");
+        for (auto& p : parts)
+            out = std::make_unique<BinExpr>(Tok::PLUS, std::move(out), std::move(p), line);
+        return out;
+    }
+
     ExprP parsePrimary() {
         Token t = peek();
         if (match(Tok::INPUT)) {
@@ -1831,7 +1913,7 @@ struct Parser {
             return std::make_unique<InputExpr>(prompt);
         }
         if (match(Tok::NUMBER)) return std::make_unique<NumExpr>(t.num);
-        if (match(Tok::STRING)) return std::make_unique<StrExpr>(t.text);
+        if (match(Tok::STRING)) return buildStringExpr(t.text, t.line);
         if (check(Tok::IDENT)) {
             if (peek(1).type == Tok::LPAREN) {
                 Token name = advance();
@@ -2106,6 +2188,12 @@ static void needNums(const Value& a, const Value& b) {
 }
 static Value vadd(const Value& a, const Value& b) {
     if (a.kind == Value::STR || b.kind == Value::STR) return Value(a.toString() + b.toString());
+    if (a.kind == Value::LIST && b.kind == Value::LIST) {   // 리스트 이어붙이기
+        Value v; v.kind = Value::LIST;
+        v.list = std::make_shared<List>(*a.list);
+        v.list->insert(v.list->end(), b.list->begin(), b.list->end());
+        return v;
+    }
     needNums(a, b);
     return Value(a.num + b.num);
 }
@@ -2133,9 +2221,31 @@ template<class F> static Value vcmp(const Value& a, const Value& b, F f) {
     bool r = (a.kind == Value::NUM) ? f(a.num, b.num) : f(a.str, b.str);
     return Value(r ? 1.0 : 0.0);
 }
-// 타입이 다르면 ==/!= 는 에러 대신 false/true (인터프리터와 동일)
-static Value c_eq(const Value&a,const Value&b){ if(a.kind!=b.kind) return Value(0.0); return vcmp(a,b,[](auto x,auto y){return x==y;}); }
-static Value c_ne(const Value&a,const Value&b){ if(a.kind!=b.kind) return Value(1.0); return vcmp(a,b,[](auto x,auto y){return x!=y;}); }
+// ==/!= 깊은 비교 — 인터프리터의 deepEquals 와 동일 규칙 (타입 다르면 false, 순환은 깊이 한도)
+static bool veqDeep(const Value& a, const Value& b, int depth) {
+    if (depth > 1000) throw RunErr("비교할 수 없습니다 (자기 자신을 포함한 구조?)");
+    if (a.kind != b.kind) return false;
+    if (a.kind == Value::NUM) return a.num == b.num;
+    if (a.kind == Value::STR) return a.str == b.str;
+    if (a.kind == Value::LIST) {
+        if (a.list == b.list) return true;
+        if (a.list->size() != b.list->size()) return false;
+        for (size_t i = 0; i < a.list->size(); i++)
+            if (!veqDeep((*a.list)[i], (*b.list)[i], depth + 1)) return false;
+        return true;
+    }
+    if (a.map == b.map) return true;
+    if (a.className != b.className) return false;
+    if (a.map->size() != b.map->size()) return false;
+    auto ia = a.map->begin(), ib = b.map->begin();
+    for (; ia != a.map->end(); ++ia, ++ib) {
+        if (ia->first != ib->first) return false;
+        if (!veqDeep(ia->second, ib->second, depth + 1)) return false;
+    }
+    return true;
+}
+static Value c_eq(const Value&a,const Value&b){ return Value(veqDeep(a,b,0) ? 1.0 : 0.0); }
+static Value c_ne(const Value&a,const Value&b){ return Value(veqDeep(a,b,0) ? 0.0 : 1.0); }
 static Value c_lt(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x< y;}); }
 static Value c_gt(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x> y;}); }
 static Value c_le(const Value&a,const Value&b){ return vcmp(a,b,[](auto x,auto y){return x<=y;}); }

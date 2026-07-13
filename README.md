@@ -17,7 +17,7 @@ func fib(n) {
 }
 
 for i = 1 to 10 {
-    print "fib(" + i + ") =", fib(i)
+    print "fib({i}) = {fib(i)}"    # string interpolation
 }
 
 try {
@@ -43,7 +43,7 @@ class 사람 {
 
 - **Readable syntax** — `if x > 5 then { }`, `for i = 1 to 10`, `while x > 0 do { }`; optional filler keywords (`then`, `do`) make code read like pseudocode
 - **Two ways to run** — an interpreter for instant feedback, and a transpiler (`.my` → C++ → native executable via g++). Both backends are differential-tested to produce identical output for the same program
-- **A complete language** — functions (recursion, hoisting), classes (constructors, methods, `self`), lists and dictionaries (reference semantics, `copy()` for deep copies), UTF-8-aware string handling, `try/catch`, `import`, file I/O, and 30+ built-in functions
+- **A complete language** — functions (recursion, hoisting), classes (constructors, methods, `self`), lists and dictionaries (reference semantics, deep equality with `==`, `+` to join lists, `copy()` for deep copies), string interpolation (`"name: {x}"`), UTF-8-aware string handling, `try/catch`, `import`, file I/O, and 30+ built-in functions
 - **Helpful errors** — error messages with line numbers; with `import`, errors point to the original file (`[utils.my line 3]`). Undefined variables and wrong argument counts are caught at build time
 - **Built-in dev environment** — a CLI shell with file management, an editor (arrow-key scroll viewer, paste mode), and one-command run/build
 
@@ -103,7 +103,7 @@ Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and
 ## Why
 
 I built this from scratch to understand how programming languages actually work.
-It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v1.5
+It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v1.6
 by writing real programs in it, finding what was missing, and adding it — the text RPG in
 `examples/` was the validation project that drove features like `exists()`, `try/catch`, and `import`.
 

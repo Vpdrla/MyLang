@@ -25,7 +25,21 @@
       "patterns": [
         {
           "name": "constant.character.escape.mylang",
-          "match": "\\\\[nt\"\\\\]"
+          "match": "\\\\[nt\"\\\\]|\\{\\{|\\}\\}"
+        },
+        {
+          "name": "meta.embedded.interpolation.mylang",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.mylang" } },
+          "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.mylang" } },
+          "patterns": [
+            { "include": "#number" },
+            { "include": "#constant" },
+            { "include": "#self" },
+            { "include": "#builtin" },
+            { "include": "#operator" }
+          ]
         }
       ]
     },
