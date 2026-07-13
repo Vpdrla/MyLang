@@ -36,6 +36,7 @@
 #include <set>
 #include <cstdio>
 #include <chrono>
+#include <functional>
 #include <stdexcept>
 #include <filesystem>
 
@@ -52,10 +53,26 @@
 #include <io.h>        // _isatty
 #undef IN
 #undef OUT             // winnt.h 의 빈 매크로 (옛 SAL 어노테이션) 제거
+#elif defined(MYLANG_WASM)
+#include <emscripten.h>
 #else
 #include <pthread.h>
 #include <termios.h>   // raw 키 입력 (방향키 스크롤용)
 #include <unistd.h>
+#endif
+
+#ifdef MYLANG_WASM
+// 브라우저의 prompt() 다이얼로그로 입력 받기
+EM_JS(char*, js_prompt_raw, (const char* p), {
+    var msg = UTF8ToString(p);
+    var r = prompt(msg.length ? msg : "input:");
+    if (r === null) r = "";
+    var len = lengthBytesUTF8(r) + 1;
+    var buf = _malloc(len);
+    stringToUTF8(r, buf, len);
+    return buf;
+});
+static std::string g_pendingPrompt;   // input 의 프롬프트 문구를 다이얼로그로 전달
 #endif
 
 namespace fs = std::filesystem;
@@ -96,6 +113,14 @@ static const int MAX_RECURSION = 2000;   // 함수 재귀 깊이 제한
 //  플랫폼 헬퍼 — Windows 한글 입력/파일명 깨짐 방지
 // ============================================================
 static bool readLine(string& out) {
+#ifdef MYLANG_WASM
+    char* r = js_prompt_raw(g_pendingPrompt.c_str());
+    out = r;
+    free(r);
+    g_pendingPrompt.clear();
+    std::cout << out << "\n";   // 입력값을 출력창에도 기록
+    return true;
+#endif
 #ifdef _WIN32
     HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
     DWORD mode;
@@ -133,7 +158,7 @@ static void clearScreen() { std::cout << "\033[2J\033[3J\033[H" << std::flush; }
 
 static void drawBanner() {
     std::cout << "==========================================\n";
-    std::cout << "  MyLang Shell v1.4  (help 로 도움말)\n";
+    std::cout << "  MyLang Shell v1.5  (help 로 도움말)\n";
     std::cout << "==========================================\n";
 }
 
@@ -147,7 +172,9 @@ static string trim(const string& s) {
 // ---- 방향키 스크롤용 raw 키 입력 ----
 enum Key { K_UP = 1000, K_DOWN, K_PGUP, K_PGDN, K_HOME, K_END, K_QUIT, K_OTHER };
 static int readKey() {
-#ifdef _WIN32
+#if defined(MYLANG_WASM)
+    return K_QUIT;   // 웹에선 셸 뷰어를 쓰지 않음
+#elif defined(_WIN32)
     if (!_isatty(0)) {   // 파이프 입력이면 (테스트용) 한 줄 명령으로 대체
         string l; if (!std::getline(std::cin, l)) return K_QUIT;
         l = trim(l);
@@ -298,6 +325,30 @@ static string lineTag(int line) {
     return "[줄 " + std::to_string(line) + "] ";
 }
 
+// 마지막으로 실행/빌드한 소스 (에러 시 해당 줄을 보여주기 위해 보관)
+static std::vector<string> g_srcLines;
+
+// 에러 메시지 출력 + 문제의 코드 줄 표시
+//   !! 에러: [줄 12] 키가 없습니다: "점수"
+//       줄 12 | print d["점수"]
+static void printError(const string& msg, const string& prefix = "!! 에러: ") {
+    std::cout << prefix << msg << "\n";
+    size_t a = msg.find('[');
+    size_t b = msg.find(']');
+    if (a == string::npos || b == string::npos || b < a) return;
+    string tag = msg.substr(a + 1, b - a - 1);
+    int merged = 0;
+    if (!g_lineMap.empty()) {
+        // import 사용 시: "파일 줄 N" 라벨을 병합 줄번호로 역변환
+        for (size_t i = 1; i < g_lineMap.size(); i++)
+            if (g_lineMap[i] == tag) { merged = (int)i; break; }
+    } else if (tag.rfind("줄 ", 0) == 0) {
+        merged = atoi(tag.c_str() + string("줄 ").size());
+    }
+    if (merged >= 1 && merged <= (int)g_srcLines.size())
+        std::cout << "    " << tag << " | " << trim(g_srcLines[merged - 1]) << "\n";
+}
+
 // ============================================================
 //  import 전개 — 실행/빌드 전에 import "파일.my" 줄을 해당 파일
 //  내용으로 치환하고, 병합 줄번호 → 원본 위치 매핑을 만든다.
@@ -356,6 +407,13 @@ static string expandImports(const string& mainPath) {
     loadWithImports(mainPath, loaded, out, lmap, sawImport, "");
     if (sawImport) g_lineMap = lmap;     // import 썼을 때만 "파일:줄" 표기
     else           g_lineMap.clear();
+    // 에러 표시용으로 소스 줄 보관
+    g_srcLines.clear();
+    string cur;
+    for (char c : out) {
+        if (c == '\n') { g_srcLines.push_back(cur); cur.clear(); }
+        else cur += c;
+    }
     return out;
 }
 
@@ -781,6 +839,9 @@ struct InputExpr : Expr {
     string prompt;
     InputExpr(string p) : prompt(std::move(p)) {}
     Value eval(Env&) override {
+#ifdef MYLANG_WASM
+        g_pendingPrompt = prompt;
+#endif
         if (!prompt.empty()) std::cout << prompt << std::flush;
         string line;
         if (!readLine(line))
@@ -1859,10 +1920,14 @@ void runSource(const string& src) {
 // 이렇게 하면 MAX_RECURSION 제한이 스택보다 항상 먼저 걸려서
 // 세그폴트 대신 깔끔한 에러 메시지가 나온다.)
 // ------------------------------------------------------------
-static void runSourceBigStack(const string& src) {
+static void runOnBigStack(const std::function<void()>& job) {
+#ifdef MYLANG_WASM
+    job();
+    return;
+#endif
     std::exception_ptr eptr = nullptr;
     auto work = [&]() {
-        try { runSource(src); }
+        try { job(); }
         catch (...) { eptr = std::current_exception(); }
     };
     using Work = decltype(work);
@@ -1875,7 +1940,7 @@ static void runSourceBigStack(const string& src) {
     HANDLE th = (HANDLE)_beginthreadex(nullptr, (unsigned)STACK_BYTES,
                                        tramp, &work,
                                        STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
-    if (!th) { runSource(src); return; }   // 스레드 생성 실패 시 그냥 직접 실행
+    if (!th) { job(); return; }   // 스레드 생성 실패 시 그냥 직접 실행
     WaitForSingleObject(th, INFINITE);
     CloseHandle(th);
 #else
@@ -1889,13 +1954,16 @@ static void runSourceBigStack(const string& src) {
     pthread_t th;
     if (pthread_create(&th, &attr, tramp, &work) != 0) {
         pthread_attr_destroy(&attr);
-        runSource(src);
+        job();
         return;
     }
     pthread_join(th, nullptr);
     pthread_attr_destroy(&attr);
 #endif
     if (eptr) std::rethrow_exception(eptr);
+}
+static void runSourceBigStack(const string& src) {
+    runOnBigStack([&] { runSource(src); });
 }
 
 // ============================================================
@@ -2281,6 +2349,7 @@ static Value b_writefile(const Value& a, const Value& b) {
     return Value(1.0);
 }
 #include <chrono>
+#include <functional>
 static Value b_time() {
     auto now = std::chrono::system_clock::now().time_since_epoch();
     return Value(std::chrono::duration<double>(now).count());
@@ -2917,7 +2986,7 @@ void cmdBuild(const string& arg) {
         CodeGen gen;
         cppCode = gen.generate(program);
     } catch (const LangError& e) {
-        std::cout << "!! 변환 에러: " << e.what() << "\n";
+        printError(e.what(), "!! 변환 에러: ");
         return;
     }
     {
@@ -2944,6 +3013,128 @@ void cmdBuild(const string& arg) {
         int rrc = std::system(runCmd.c_str());
         if (rrc != 0) std::cout << "(프로그램이 " << rrc << " 코드로 종료됨)\n";
     }
+}
+
+#ifdef MYLANG_WASM
+// ============================================================
+//  WASM 진입점 — 웹 플레이그라운드에서 호출
+// ============================================================
+extern "C" EMSCRIPTEN_KEEPALIVE void mylang_run(const char* code) {
+    string src(code);
+    // 에러 줄 표시용 소스 보관
+    g_lineMap.clear();
+    g_srcLines.clear();
+    string cur;
+    for (char c : src) {
+        if (c == '\n') { g_srcLines.push_back(cur); cur.clear(); }
+        else cur += c;
+    }
+    try {
+        runSource(src);
+        std::cout << "=== 정상 종료 ===\n";
+    } catch (const LangError& e) {
+        printError(e.what());
+    } catch (const std::exception& e) {
+        std::cout << "!! 내부 에러: " << e.what() << "\n";
+    }
+    std::cout << std::flush;
+}
+#else   // ---- 이하 네이티브 전용 (CLI 셸) ----
+
+// 중괄호 열림/닫힘 차이 (문자열/주석 무시) — REPL 여러 줄 입력 판단용
+static int braceDelta(const string& s) {
+    int d = 0;
+    bool inStr = false;
+    for (size_t i = 0; i < s.size(); i++) {
+        char c = s[i];
+        if (inStr) {
+            if (c == '\\') { i++; continue; }
+            if (c == '"') inStr = false;
+            continue;
+        }
+        if (c == '"') { inStr = true; continue; }
+        if (c == '#') break;
+        if (c == '{') d++;
+        if (c == '}') d--;
+    }
+    return d;
+}
+
+// REPL — 한 줄씩 즉시 실행, 변수/함수/클래스는 세션 동안 유지
+void cmdRepl() {
+    clearScreen();
+    std::cout << "=== MyLang REPL ===  (:q 나가기)\n";
+    std::cout << "한 줄씩 바로 실행됩니다. 값만 입력하면 결과를 출력해요 (예: 3 * 7)\n\n";
+    Env env;
+    g_funcs.clear();
+    g_classes.clear();
+    g_callDepth = 0;
+    g_lineMap.clear();
+    g_srcLines.clear();
+    g_global = &env;
+    std::vector<StmtP> keepAlive;   // 함수/클래스 AST 소유권 유지용
+    string line;
+    while (true) {
+        std::cout << ">> " << std::flush;
+        if (!readLine(line)) break;
+        string t = trim(line);
+        if (t == ":q" || t == "exit") break;
+        if (t.empty()) continue;
+
+        // 블록이 열려 있으면 닫힐 때까지 이어서 입력
+        string src = line;
+        int depth = braceDelta(line);
+        while (depth > 0) {
+            std::cout << ".. " << std::flush;
+            string more;
+            if (!readLine(more)) { depth = 0; break; }
+            src += "\n" + more;
+            depth += braceDelta(more);
+        }
+
+        // 1차: 그대로 파싱. 실패하면 "print (입력)" 으로 재시도 → 값 입력 시 자동 출력
+        std::vector<StmtP> prog;
+        try {
+            Parser ps(lex(src));
+            prog = ps.parseProgram();
+        } catch (LangError& first) {
+            try {
+                Parser ps2(lex("print " + src));
+                prog = ps2.parseProgram();
+            } catch (...) {
+                printError(first.what());
+                continue;
+            }
+        }
+        // 실행 (재귀 대비 큰 스택에서)
+        try {
+            runOnBigStack([&] {
+                for (auto& s : prog) {
+                    if (auto* fn = dynamic_cast<FuncStmt*>(s.get())) g_funcs[fn->name] = fn;
+                    if (auto* cs = dynamic_cast<ClassStmt*>(s.get())) g_classes[cs->name] = cs;
+                }
+                // 단독 함수 호출이면 반환값을 보여줌 (0 = return 없음이므로 생략)
+                if (prog.size() == 1) {
+                    if (auto* es = dynamic_cast<ExprStmt*>(prog[0].get())) {
+                        Value v = es->e->eval(env);
+                        if (!(v.kind == Value::NUM && v.num == 0))
+                            std::cout << v.toString() << "\n";
+                        return;
+                    }
+                }
+                for (auto& s : prog) s->exec(env);
+            });
+        } catch (ExitSignal&) {
+            break;
+        } catch (LangError& e) {
+            printError(e.what());
+        } catch (std::exception& e) {
+            std::cout << "!! 내부 에러: " << e.what() << "\n";
+        }
+        for (auto& s : prog) keepAlive.push_back(std::move(s));
+    }
+    g_global = nullptr;
+    std::cout << "(REPL 종료)\n";
 }
 
 // ============================================================
@@ -3049,7 +3240,7 @@ void cmdCode() {
                 runSourceBigStack(expandImports(currentFile));   // 저장본 기준 (import 지원)
                 std::cout << "=== 정상 종료 ===\n";
             } catch (const LangError& e) {
-                std::cout << "!! 에러: " << e.what() << "\n";
+                printError(e.what());
             } catch (const std::exception& e) {
                 std::cout << "!! 내부 에러: " << e.what() << "\n";
             }
@@ -3112,7 +3303,7 @@ void cmdRun() {
         runSourceBigStack(expandImports(currentFile));
         std::cout << "=== 정상 종료 ===\n";
     } catch (const LangError& e) {
-        std::cout << "!! 에러: " << e.what() << "\n";
+        printError(e.what());
     } catch (const std::exception& e) {
         std::cout << "!! 내부 에러: " << e.what() << "\n";
     }
@@ -3136,6 +3327,7 @@ void cmdHelp() {
         "  build         진짜 실행 파일로 컴파일 (.my → .cpp → exe)\n"
         "  build run     컴파일 후 바로 실행\n"
         "  list          파일 목록\n"
+        "  repl          한 줄씩 즉시 실행 모드\n"
         "  clear         화면 지우기\n"
         "  exit          종료\n"
         "\n언어 문법 예시:\n"
@@ -3212,6 +3404,7 @@ int main(int argc, char** argv) {
         else if (cmd == "run")     cmdRun();
         else if (cmd == "list")    cmdList();
         else if (cmd == "build")   cmdBuild(arg);
+        else if (cmd == "repl")    cmdRepl();
         else if (cmd == "clear")   { clearScreen(); drawBanner(); }
         else if (cmd == "help")    cmdHelp();
         else if (cmd == "exit" || cmd == "quit") break;
@@ -3220,3 +3413,4 @@ int main(int argc, char** argv) {
     std::cout << "종료합니다.\n";
     return 0;
 }
+#endif  // MYLANG_WASM 아님 (네이티브 셸 끝)

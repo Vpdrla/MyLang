@@ -1,0 +1,67 @@
+# MyLang — Claude Code 작업 가이드
+
+자작 프로그래밍 언어 MyLang의 저장소. 사용자(Justin, 중학생)와 Claude가 claude.ai 대화로 v0.1부터 여기까지 만들었고, 이후 작업은 Claude Code로 진행.
+
+## 대화 규칙
+- **한국어로 대화한다.** 간결하고 직설적으로 — 장황한 설명, 과한 칭찬, 불필요한 확인 질문 금지.
+- GitHub 공개 문서(README, 프로젝트 설명)는 **영어**로 쓰고, 한국어 번역본(`README.ko.md`)을 별도로 둔다.
+- 코드 주석과 에러 메시지는 한국어 (언어 자체가 한국어 사용자 대상).
+
+## 프로젝트 개요
+- **단일 파일 `mylang.cpp` (~3,300줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
+- 언어 스펙: `MYLANG_SPEC.md`(한국어) / `MYLANG_SPEC.en.md`(영어) — **기능 추가 시 두 문서 모두 갱신**.
+- 검증 프로젝트: `examples/rpg.my` (222줄 텍스트 RPG).
+- 웹 플레이그라운드: `docs/` (index.html + mylang.js + mylang.wasm) → GitHub Pages.
+- VSCode 확장: `vscode-mylang/` — 새 키워드/내장함수 추가 시 tmLanguage도 갱신.
+
+## 빌드/테스트 명령
+```bash
+# 네이티브 (필수 통과: C++17과 C++20 둘 다)
+g++ -std=c++17 -O2 -Wall -o mylang mylang.cpp
+g++ -std=c++20 -O2 -fsyntax-only mylang.cpp
+
+# 실행
+./mylang 파일.my              # 인터프리터
+./mylang build 파일.my run    # 트랜스파일 → g++ → 실행
+
+# WASM (플레이그라운드 갱신 시)
+emcc -O2 -std=c++17 -fexceptions -DMYLANG_WASM mylang.cpp -o docs/mylang.js \
+  -s EXPORTED_FUNCTIONS=_mylang_run,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
+  -s DISABLE_EXCEPTION_CATCHING=0 -s ALLOW_MEMORY_GROWTH=1 \
+  -s TOTAL_STACK=33554432 -s INITIAL_MEMORY=67108864 \
+  -s MODULARIZE=1 -s EXPORT_NAME=createMyLang -s ENVIRONMENT=web
+```
+
+## 철칙: 듀얼 백엔드 동시 구현 + diff 검증
+언어 기능을 추가/수정하면 **반드시 인터프리터와 트랜스파일러(RUNTIME 문자열 + CodeGen) 양쪽에 구현**하고, 같은 프로그램을 두 방식으로 실행해 출력을 diff로 비교한다 (differential testing — 지금까지 코드젠 버그를 여러 개 잡아준 핵심 검증법):
+```bash
+./mylang test.my > i.txt
+./mylang build test.my && ./test > c.txt
+diff i.txt c.txt   # 반드시 일치 (예외: catch 변수의 에러 메시지 — 인터프리터만 [파일 줄 N] 접두사 포함)
+```
+에러 케이스(없는 키, 0 나누기, 인자 개수 등)도 양쪽에서 확인.
+
+## 아키텍처 요점
+- `Value`: NUM/STR/LIST/MAP/OBJ. 리스트/딕셔너리/객체는 shared_ptr 참조 방식, `copy()`가 깊은 복사(순환 감지). 문자열 불변, UTF-8 글자 단위 인덱싱. **리스트 인덱스는 1부터.**
+- 제어 흐름 = C++ 예외 (BreakSignal/ContinueSignal/ReturnSignal/ExitSignal) — try/catch(LangError)를 **통과**해야 함.
+- 에러 메시지는 `lineTag(line)` 사용 (직접 "[줄 N]" 문자열 만들지 말 것) — import 병합 시 원본 파일 좌표(`[utils.my 줄 3]`)로 자동 변환됨 (`g_lineMap`). 에러 밑에 해당 코드 줄 표시는 `printError()` + `g_srcLines`.
+- 실행은 `runOnBigStack`(128MB 전용 스택 스레드) 경유 — 재귀 한도(2000) 전에 세그폴트 방지. WASM에선 스레드 없이 직접 실행(링크 시 TOTAL_STACK 32MB).
+- 트랜스파일러: 메서드는 클래스별 정적 함수 `m_클래스_메서드` + (이름,인자수)별 디스패처(수제 vtable). 식별자 맹글링 u_/f_ + non-ASCII hex. 대입 좌변은 접근자 체인(idx_mid/idx_put/fld_mid/fld_put).
+- `import`는 파싱 전 텍스트 병합 (`expandImports`, 중복 자동 스킵).
+
+## 지뢰밭 (이미 밟고 고친 것들 — 재발 금지)
+- windows.h가 `IN`/`OUT`을 빈 매크로로 정의 → enum은 `Tok::INKW`, include 뒤 `#undef IN/OUT` + `#ifndef NOMINMAX` 가드 유지 (본체와 RUNTIME 문자열 양쪽).
+- Windows 콘솔 한글: 셸은 ReadConsoleW, **생성 exe의 RUNTIME에도 동일 로직(rt_readline) 이식돼 있음** — input 관련 수정 시 양쪽 유지.
+- Emscripten은 기본으로 C++ 예외 catch 비활성 → WASM 빌드에 `-fexceptions -s DISABLE_EXCEPTION_CATCHING=0` 필수 (없으면 return/break가 전부 죽음).
+- 화면 클리어는 `\033[2J\033[3J\033[H` (3J = 스크롤백까지).
+- u8string은 C++17/20 타입이 달라서 바이트 복사로 처리 중.
+
+## 현재 상태 & 남은 작업
+언어 v1.5 완성 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시). 저장소: github.com/Vpdrla/MyLang
+
+- [ ] `docs/` 3개 파일 업로드 + GitHub Pages 설정 (Settings→Pages→main `/docs`) → https://vpdrla.github.io/MyLang/ 확인
+- [ ] LICENSE 추가 (MIT)
+- [ ] README용 데모 GIF (셸 → RPG → build 30초)
+- [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
+- [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
+- [ ] 다음 언어 기능 후보 (사용자와 상의 후): 상속, 일급 함수, 문자열 포매팅 `"이름: {x}"`
