@@ -1,77 +1,124 @@
 # MyLang
 
-비개발자도 읽을 수 있는 의사코드 스타일 프로그래밍 언어.
-C++ 단일 파일(3,200줄)로 구현된 **인터프리터 + C++ 트랜스파일러(네이티브 컴파일)** 듀얼 백엔드.
+[![CI](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml/badge.svg)](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+*English | [한국어](README.ko.md)*
+
+**▶ [Try it in your browser — no install needed](https://vpdrla.github.io/MyLang/)**
+
+![Demo: playing and building the example RPG](docs/demo.svg)
+
+A pseudocode-style programming language designed to be readable by non-programmers.
+Implemented in a single C++ file (~3,400 lines) with a **dual backend: a tree-walking interpreter and a C++ transpiler** that produces standalone native executables.
 
 ```
-class 사람 {
-    func init(이름) { self.이름 = 이름  self.나이 = 0 }
-    func 인사() { print "안녕, 나는 " + self.이름 }
+func fib(n) {
+    if n <= 2 then { return 1 }
+    return fib(n - 1) + fib(n - 2)
 }
 
-let p = 사람("성윤")
-p.인사()
-
-for i = 1 to 3 {
-    if i % 2 == 1 then { print i, "는 홀수" }
+for i = 1 to 10 {
+    print "fib({i}) = {fib(i)}"    # string interpolation
 }
 
 try {
-    let n = num(input "숫자를 입력해봐: ")
-    print "10 나누기 " + n + " =", 10 / n
-} catch 오류 {
-    print "문제 발생:", 오류
+    let n = num(input "Enter a number: ")
+    print "10 /", n, "=", 10 / n
+} catch err {
+    print "Something went wrong:", err
 }
 ```
 
-## 특징
+Identifiers can be written in any language (full UTF-8 support), so classes, functions,
+and variables work naturally in Korean, English, or anything else:
 
-- **읽히는 문법** — `if x > 5 then { }`, `for i = 1 to 10`, `while x > 0 do { }`. 한글 변수/함수/클래스 이름 지원 (UTF-8)
-- **두 가지 실행 방식** — 인터프리터(즉시 실행)와 트랜스파일러(`.my` → C++ → 단독 실행 파일). 두 백엔드는 동일한 프로그램에 대해 동일한 출력을 내도록 diff 검증됨
-- **완전한 언어 기능** — 함수(재귀·호이스팅), 클래스(생성자·메서드·`self`), 리스트/딕셔너리(참조 방식, `copy()`로 깊은 복사), 문자열 처리(UTF-8 글자 단위), `try/catch`, `import`, 파일 입출력, 내장 함수 30여 개
-- **친절한 에러** — 한국어 에러 메시지 + 줄번호. `import`로 파일을 나눠도 에러는 원본 파일 좌표(`[utils.my 줄 3]`)로 표시. 미정의 변수·인자 개수 오류는 빌드 시점에 검출
-- **내장 개발 환경** — 파일 관리/편집/실행이 되는 CLI 셸 (방향키 스크롤 뷰어, 붙여넣기 모드 포함)
+```
+class 사람 {
+    func init(이름) { self.이름 = 이름 }
+    func 인사() { print "안녕, 나는 " + self.이름 }
+}
+사람("성윤").인사()
+```
 
-## 빌드
+## Features
+
+- **Readable syntax** — `if x > 5 then { }`, `for i = 1 to 10`, `while x > 0 do { }`; optional filler keywords (`then`, `do`) make code read like pseudocode
+- **Two ways to run** — an interpreter for instant feedback, and a transpiler (`.my` → C++ → native executable via g++). Both backends are differential-tested to produce identical output for the same program
+- **A complete language** — functions (recursion, hoisting), classes (constructors, methods, `self`), lists and dictionaries (reference semantics, deep equality with `==`, `+` to join lists, `copy()` for deep copies), string interpolation (`"name: {x}"`), UTF-8-aware string handling, `try/catch`, `import`, file I/O, and 30+ built-in functions
+- **Helpful errors** — error messages with line numbers; with `import`, errors point to the original file (`[utils.my line 3]`). Undefined variables and wrong argument counts are caught at build time
+- **Built-in dev environment** — a CLI shell with file management, an editor (arrow-key scroll viewer, paste mode), and one-command run/build
+
+> Note: error messages and shell UI are currently in Korean.
+
+## Playground
+
+The [web playground](https://vpdrla.github.io/MyLang/) runs the full interpreter in your browser via WebAssembly —
+including classes, try/catch, and even the example RPG (input pops up as a dialog; `import` is desktop-only,
+and file I/O writes to in-memory storage that resets on page reload).
+
+## Build
 
 ```bash
 g++ -std=c++17 -O2 -o mylang mylang.cpp        # Linux / WSL
 g++ -std=c++17 -O2 -o mylang.exe mylang.cpp    # Windows (MinGW)
 ```
 
-의존성 없음. C++17 이상 (C++20 호환).
+No dependencies. Requires C++17 (C++20 compatible).
 
-## 사용법
+## Usage
 
 ```bash
-mylang                      # 대화형 셸 (create / code / run / build ...)
-mylang 프로그램.my           # 파일 바로 실행 (인터프리터)
-mylang build 프로그램.my     # 네이티브 실행 파일로 컴파일 (g++ 필요)
-mylang build 프로그램.my run # 컴파일 후 즉시 실행
+mylang                      # interactive shell (create / code / run / build ...)
+mylang program.my           # run a file directly (interpreter)
+mylang build program.my     # compile to a native executable (requires g++)
+mylang build program.my run # compile and run immediately
 ```
 
-언어 문법 전체는 **[MYLANG_SPEC.md](MYLANG_SPEC.md)** 참고.
-AI에게 이 명세를 주면 MyLang 코드를 짜줄 수 있습니다 (바이브 코딩용으로 설계됨).
+Inside the shell, `repl` starts a line-by-line REPL (type an expression to see its value).
 
-## 예제
+The full language reference: **[MYLANG_SPEC.en.md](MYLANG_SPEC.en.md)** (English) / **[MYLANG_SPEC.md](MYLANG_SPEC.md)** (한국어).
+The spec is written so you can hand it to an AI assistant and have it write valid MyLang code (designed with AI-assisted "vibe coding" in mind).
 
-`examples/rpg.my` — 클래스·딕셔너리·파일 저장/불러오기를 전부 사용하는 텍스트 RPG (222줄):
+## Editor support
+
+`vscode-mylang/` contains a VS Code extension with syntax highlighting for `.my` files —
+copy the folder into `~/.vscode/extensions/` (see its README).
+
+## Example
+
+`examples/rpg.my` — a text RPG (222 lines) exercising classes, dictionaries, and save/load via file I/O:
 
 ```bash
 mylang examples/rpg.my
 ```
 
-## 구조
+## Architecture
 
 ```
-소스 코드 → 렉서(토큰) → 재귀 하강 파서(AST) ─┬→ 트리워킹 인터프리터
-                                              └→ C++ 코드 생성 → g++ → 실행 파일
+source → lexer (tokens) → recursive-descent parser (AST) ─┬→ tree-walking interpreter
+                                                          └→ C++ code generation → g++ → native executable
 ```
 
-단일 파일 `mylang.cpp` 안에 렉서, 파서, AST, 인터프리터, 트랜스파일러, 런타임 라이브러리, CLI 셸이 모두 들어 있습니다.
+Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and the CLI shell — lives in the single file `mylang.cpp`.
 
-## 만든 이유
+## Why
 
-프로그래밍 언어가 어떻게 만들어지는지 직접 확인하려고 바닥부터 만들었습니다.
-버전 0.1(변수와 print만 되는 인터프리터)에서 시작해, 실제로 게임을 만들어 보며
-부족한 기능을 찾아 추가하는 방식으로 v1.4까지 발전시켰습니다.
+I built this from scratch to understand how programming languages actually work.
+It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v1.6
+by writing real programs in it, finding what was missing, and adding it — the text RPG in
+`examples/` was the validation project that drove features like `exists()`, `try/catch`, and `import`.
+
+## Testing
+
+Every language feature is verified by **differential testing**: each program in `tests/cases/`
+runs on both backends (the interpreter and the transpiled native binary) and the outputs must match.
+CI does this on every push:
+
+```bash
+tests/run_tests.sh
+```
+
+## License
+
+[MIT](LICENSE)

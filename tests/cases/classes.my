@@ -1,0 +1,31 @@
+# 생성자, 메서드, self, 필드 외부 접근, 객체 print
+class 사람 {
+    func init(이름, 나이) {
+        self.이름 = 이름
+        self.나이 = 나이
+    }
+    func 인사() { print "안녕, 나는 " + self.이름 + " (" + self.나이 + "살)" }
+    func 생일() {
+        self.나이 += 1
+        self.인사()
+    }
+}
+
+let p = 사람("성윤", 15)
+p.인사()
+p.생일()
+p.별명 = "짱"          # 필드는 밖에서 생성 가능
+print p
+print p.별명, p.나이
+
+class 카운터 {
+    func init() { self.n = 0 }
+    func 증가() { self.n += 1  return self.n }
+}
+let c = 카운터()
+print c.증가(), c.증가(), c.증가()
+
+# 객체는 참조 방식
+let q = p
+q.나이 = 99
+print "참조:", p.나이

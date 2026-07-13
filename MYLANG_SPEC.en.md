@@ -1,0 +1,160 @@
+# MyLang Language Specification (v1.6)
+
+*English | [한국어](MYLANG_SPEC.md)*
+
+Hand this document to an AI assistant and it can write valid MyLang code for you.
+Source files use the `.my` extension, encoded in UTF-8.
+
+## Running programs
+```
+mylang program.my           # run directly (interpreter)
+mylang build program.my     # transpile to C++, compile with g++ → native executable
+mylang build program.my run # build, then run immediately
+mylang                      # interactive shell (create/choose/code/run/build/...)
+```
+Inside the shell, `repl` starts a line-by-line REPL — type a bare expression to see its value.
+
+## Types
+Numbers (no integer/float distinction), strings, lists, dictionaries, objects (class instances).
+`true`/`false` are the numbers 1/0. Truthiness: 0, the empty string, and empty lists/dictionaries are falsy. Objects are always truthy.
+Lists, dictionaries, and objects use **reference semantics** — copying a variable or passing an argument shares the same underlying value (like Python).
+Strings are **immutable** — `s[1] = "x"` is not allowed; build a new string with `replace()` and reassign.
+
+## Variables and assignment
+```
+let x = 10          # declaration (omitting the initializer gives 0)
+let name = "Yun"    # identifiers may use any language (full UTF-8)
+x = 20              # assignment (must be declared with let first)
+x += 1              # += -= *= /= supported (also on list elements and object fields)
+```
+
+## Output / input
+```
+print "hello"                     # newline appended automatically
+print "x =", x, "end"             # multiple values with commas (separated by spaces)
+print "line1\nline2\ttab \"quoted\""   # escapes: \n \t \" \\
+print "name: {name}, next year: {age + 1}"   # string interpolation — any expression inside {}
+let answer = input "Question: "   # numeric input is converted to a number automatically
+```
+Interpolation rules: literal braces are `{{` / `}}`. Double-quoted strings can't appear inside `{}` (assign to a variable first).
+
+## Operators (highest precedence first)
+```
+- (negation)  →  * / %  →  + -  →  == != < > <= >=  →  not  →  and  →  or
+```
+- `+` concatenates when a string is involved (`"age: " + 15` → "age: 15") and joins two lists (`[1] + [2]` → [1, 2])
+- `==`/`!=` work on every type — different types are simply not equal, and lists/dicts/objects compare **by content (deep equality)**. `< > <= >=` are numbers/strings only
+- Comparisons don't chain — write `a < b and b < c`, not `a < b < c`
+- `and`/`or` short-circuit
+- `#` starts a comment until end of line. Newlines/indentation are free-form (braces delimit blocks)
+
+## Control flow
+```
+if x >= 90 then { print "A" }        # then is optional
+else if x >= 80 { print "B" }
+else { print "F" }
+
+while x > 0 do { x -= 1 }            # do is optional
+
+for i = 1 to 10 { print i }          # both ends inclusive
+for i = 10 to 1 step -2 { }          # step direction is inferred when omitted
+for x in [1, 2, 3] { }               # iterate a list
+for ch in "안녕" { }                  # iterate string characters (UTF-8 aware)
+for k in dict { }                    # iterate keys (sorted order)
+
+break    continue
+```
+
+## Functions
+```
+func add(a, b) { return a + b }      # returns 0 if return is omitted
+print add(3, 4)
+```
+Recursion works (depth limit 2000). Functions can be called before their definition (hoisting).
+Functions can read/write global variables; `let` inside a function creates a local.
+
+## Lists (indices start at 1!)
+```
+let xs = [10, 20, 30]
+print xs[1]                # 10  ← the first element is index 1
+xs[2] = 99                 # modify
+xs[2] += 1                 # compound assignment on elements
+let grid = [[1,2],[3,4]]   # nesting
+grid[1][2] = 7
+let ys = xs + [40, 50]     # + joins lists (new list, originals untouched)
+print xs == [10, 99, 30]   # == compares by content (deep equality)
+```
+
+## Dictionaries (keys are strings only)
+```
+let d = {"name": "Yun", "age": 15}
+print d["name"]
+d["school"] = "middle school"   # new keys are created on assignment
+d["age"] += 1
+print d["missing"]              # error! check with has(d, "key") before reading
+```
+
+## Classes
+```
+class Person {
+    func init(name) {          # constructor (optional)
+        self.name = name
+        self.age = 0
+    }
+    func greet() { print "Hi, I am " + self.name }
+    func birthday() { self.age += 1  self.greet() }   # self accesses fields/methods
+}
+let p = Person("Yun")          # the class name is the constructor
+p.greet()
+p.age = 15                     # fields can be read/written/created from outside
+print p                        # Person{"age": 15, "name": "Yun"}
+```
+No inheritance. For dictionaries use `["key"]`, not `.`.
+
+## Built-in functions
+```
+math:    random(a,b) round(x) floor(x) ceil(x) abs(x) sqrt(x) min(a,b) max(a,b)
+convert: num("15")  str(3)
+common:  len(list/string/dict)
+list:    push(xs,value) pop(xs) sort(xs) remove(xs,index)
+dict:    keys(d) has(d,key) remove(d,key)
+string:  split(s,sep) join(xs,sep) upper(s) lower(s)
+         find(s,needle)→position (0 if absent)  replace(s,old,new)  substr(s,start,count)
+         s[1] indexing works (read-only)
+file:    readfile(path) writefile(path,content) appendfile(path,content) exists(path)
+misc:    time()→seconds  exit()→quit immediately  copy(v)→deep copy  error("msg")→raise error
+```
+
+## Multiple files (import)
+```
+import "utils.my"        # at the top of the file, one per line. Duplicate imports are skipped
+```
+`import` is desktop-only (not available in the web playground or REPL).
+
+## Error handling (try/catch)
+```
+try {
+    let n = num(input "Number: ")   # error if not a number
+    print 10 / n                    # error if 0
+} catch err {
+    print "Something went wrong:", err   # err holds the error message (a string)
+}
+error("my own error")               # raise an error that try can catch
+```
+break/continue/return/exit are not errors — they pass through catch untouched.
+
+## Copying (mind the reference semantics)
+```
+let b = a           # for lists/dicts/objects this aliases the same value (mutating b mutates a)
+let b = copy(a)     # fully independent deep copy
+```
+
+## Common mistakes (emphasize these to an AI)
+1. **Indices start at 1** (not 0!)
+2. No `elif` → use `else if`
+3. Declare variables with `let` before use (functions are the exception: hoisted)
+4. Reading a missing dictionary key is an **error** — check with `has()` first
+5. String characters can't be modified → combine `replace()` / `substr()`
+6. Check `exists()` before `readfile` (or wrap in try/catch)
+7. Don't write `input =` — it's `x = input "Question: "`
+8. Logical negation is `not`, not `!`

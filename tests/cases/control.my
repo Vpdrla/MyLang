@@ -1,0 +1,21 @@
+# if/else if/else, while, for (to/step/리스트/문자열/딕셔너리), break/continue
+let 점수 = 85
+if 점수 >= 90 then { print "A" }
+else if 점수 >= 80 { print "B" }
+else { print "F" }
+
+let i = 3
+while i > 0 do { print "카운트", i  i -= 1 }
+
+for k = 1 to 5 { print k }
+for k = 10 to 1 step -3 { print k }
+for v in [10, 20, 30] { print v }
+for ch in "안녕hi" { print ch }
+let d = {"b": 2, "a": 1}
+for key in d { print key, d[key] }
+
+for n = 1 to 10 {
+    if n == 3 { continue }
+    if n == 6 { break }
+    print n
+}

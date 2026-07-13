@@ -1,0 +1,41 @@
+# 리스트 + (연결), ==/!= (깊은 비교)
+let a = [1, 2]
+let b = [3, 4]
+let c = a + b
+print c, len(c)
+print a                       # 원본은 그대로 (새 리스트 생성)
+print a + [] , [] + a
+
+# 깊은 비교
+print [1, 2] == [1, 2], [1, 2] == [2, 1], [1, 2] != [1, 2, 3]
+print [1, [2, "x"]] == [1, [2, "x"]]
+print [1, [2, "x"]] == [1, [2, "y"]]
+print {"a": 1, "b": [2]} == {"b": [2], "a": 1}
+print {"a": 1} == {"a": 2}, {"a": 1} != {}
+
+# 같은 것을 가리키면 당연히 같음
+let d = a
+print a == d
+
+# copy 본과도 내용이 같으면 같음
+print a == copy(a)
+
+# 객체 비교 — 같은 클래스 + 같은 필드
+class 점 {
+    func init(x, y) { self.x = x  self.y = y }
+}
+print 점(1, 2) == 점(1, 2), 점(1, 2) == 점(9, 9)
+
+# 타입이 다르면 false (에러 아님)
+print [1] == 1, {"a":1} == [1], 점(1,2) == {"x":1,"y":2}
+
+# < > 는 여전히 에러
+try { print [1] < [2] } catch e { print "잡음:", e }
+
+# 순환 구조끼리 비교는 에러 (같은 참조는 OK)
+let s = [1]
+push(s, s)
+print s == s
+let t = [1]
+push(t, t)
+try { print s == t } catch e { print "순환:", e }

@@ -1,0 +1,14 @@
+# 변수, 산술, 문자열 연결, 이스케이프, print
+let x = 10
+x += 5
+x *= 2
+print "x =", x
+print "나이: " + 15
+print 7 / 2, 7 % 3, -3 + 1
+print "1줄\n2줄\t탭 \"따옴표\" 백슬래시\\"
+let 이름 = "성윤"
+print "안녕, " + 이름
+print 0.5 + 0.25
+print not 0, not 1, not "", not "a"
+print (1 and 0) or 1
+print true, false

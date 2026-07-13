@@ -1,0 +1,30 @@
+# try/catch — 에러 케이스는 전부 catch 로 잡아 프로그램 출력으로 만든다
+try { print 10 / 0 } catch e { print "1:", e }
+try { print 10 % 0 } catch e { print "2:", e }
+let d = {"a": 1}
+try { print d["없는키"] } catch e { print "3:", e }
+let xs = [1, 2, 3]
+try { print xs[0] } catch e { print "4:", e }
+try { print xs[4] } catch e { print "5:", e }
+try { print xs[1.5] } catch e { print "6:", e }
+try { let n = num("abc") } catch e { print "7:", e }
+try { error("직접 만든 에러") } catch e { print "8:", e }
+try { print "문자" - 1 } catch e { print "9:", e }
+try { print -"abc" } catch e { print "10:", e }
+
+# 중첩 try + catch 후 계속 진행
+try {
+    try { error("안쪽") } catch e { print "11:", e  error("다시") }
+} catch e2 { print "12:", e2 }
+
+# return/break/continue 는 catch 를 통과해야 함
+func f() {
+    try { return 42 } catch e { print "잡히면 안 됨" }
+    return 0
+}
+print "13:", f()
+
+for i = 1 to 3 {
+    try { if i == 2 { continue } } catch e { print "잡히면 안 됨" }
+    print "14:", i
+}
