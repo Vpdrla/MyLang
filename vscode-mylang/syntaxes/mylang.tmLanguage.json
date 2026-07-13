@@ -1,0 +1,87 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MyLang",
+  "scopeName": "source.mylang",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#keyword" },
+    { "include": "#constant" },
+    { "include": "#self" },
+    { "include": "#builtin" },
+    { "include": "#definition" },
+    { "include": "#operator" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.number-sign.mylang",
+      "match": "#.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.mylang",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.mylang",
+          "match": "\\\\[nt\"\\\\]"
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.mylang",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.mylang",
+          "match": "\\b(if|else|while|for|to|step|in|break|continue|return|try|catch|then|do)\\b"
+        },
+        {
+          "name": "keyword.other.mylang",
+          "match": "\\b(let|func|class|print|input|import)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.mylang",
+          "match": "\\b(and|or|not)\\b"
+        }
+      ]
+    },
+    "constant": {
+      "name": "constant.language.mylang",
+      "match": "\\b(true|false)\\b"
+    },
+    "self": {
+      "name": "variable.language.self.mylang",
+      "match": "\\bself\\b"
+    },
+    "builtin": {
+      "name": "support.function.builtin.mylang",
+      "match": "\\b(random|round|floor|ceil|abs|sqrt|min|max|num|str|len|push|pop|sort|remove|keys|has|split|join|upper|lower|find|replace|substr|readfile|writefile|appendfile|exists|time|exit|copy|error)(?=\\s*\\()"
+    },
+    "definition": {
+      "patterns": [
+        {
+          "match": "\\b(func)\\s+([^\\s(){}\\[\\]\"#,]+)",
+          "captures": {
+            "1": { "name": "keyword.other.mylang" },
+            "2": { "name": "entity.name.function.mylang" }
+          }
+        },
+        {
+          "match": "\\b(class)\\s+([^\\s(){}\\[\\]\"#,]+)",
+          "captures": {
+            "1": { "name": "keyword.other.mylang" },
+            "2": { "name": "entity.name.type.class.mylang" }
+          }
+        }
+      ]
+    },
+    "operator": {
+      "name": "keyword.operator.mylang",
+      "match": "\\+=|-=|\\*=|/=|==|!=|<=|>=|[+\\-*/%<>=]"
+    }
+  }
+}

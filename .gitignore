@@ -9,6 +9,12 @@ mylang
 examples/*.cpp
 examples/rpg
 
+# 테스트 산출물 (러너가 지우지만 중단 대비)
+tests/cases/*
+!tests/cases/*.my
+!tests/cases/*.input
+tests/.tmp_*
+
 # 게임 세이브 / 로그
 save.txt
 *.log

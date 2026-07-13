@@ -1,0 +1,40 @@
+{
+  "name": "mylang",
+  "displayName": "MyLang",
+  "description": "Syntax highlighting for the MyLang programming language (.my)",
+  "version": "1.5.0",
+  "publisher": "vpdrla",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Vpdrla/MyLang"
+  },
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mylang",
+        "aliases": [
+          "MyLang",
+          "mylang"
+        ],
+        "extensions": [
+          ".my"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "mylang",
+        "scopeName": "source.mylang",
+        "path": "./syntaxes/mylang.tmLanguage.json"
+      }
+    ]
+  }
+}

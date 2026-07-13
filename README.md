@@ -1,11 +1,14 @@
 # MyLang
 
+[![CI](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml/badge.svg)](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 *English | [한국어](README.ko.md)*
 
 **▶ [Try it in your browser — no install needed](https://vpdrla.github.io/MyLang/)**
 
 A pseudocode-style programming language designed to be readable by non-programmers.
-Implemented in a single C++ file (~3,200 lines) with a **dual backend: a tree-walking interpreter and a C++ transpiler** that produces standalone native executables.
+Implemented in a single C++ file (~3,400 lines) with a **dual backend: a tree-walking interpreter and a C++ transpiler** that produces standalone native executables.
 
 ```
 func fib(n) {
@@ -49,7 +52,8 @@ class 사람 {
 ## Playground
 
 The [web playground](https://vpdrla.github.io/MyLang/) runs the full interpreter in your browser via WebAssembly —
-including classes, try/catch, and even the example RPG (input pops up as a dialog; `import` is desktop-only).
+including classes, try/catch, and even the example RPG (input pops up as a dialog; `import` is desktop-only,
+and file I/O writes to in-memory storage that resets on page reload).
 
 ## Build
 
@@ -99,6 +103,20 @@ Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and
 ## Why
 
 I built this from scratch to understand how programming languages actually work.
-It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v1.4
+It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v1.5
 by writing real programs in it, finding what was missing, and adding it — the text RPG in
 `examples/` was the validation project that drove features like `exists()`, `try/catch`, and `import`.
+
+## Testing
+
+Every language feature is verified by **differential testing**: each program in `tests/cases/`
+runs on both backends (the interpreter and the transpiled native binary) and the outputs must match.
+CI does this on every push:
+
+```bash
+tests/run_tests.sh
+```
+
+## License
+
+[MIT](LICENSE)

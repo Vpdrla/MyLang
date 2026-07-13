@@ -8,7 +8,7 @@
 - 코드 주석과 에러 메시지는 한국어 (언어 자체가 한국어 사용자 대상).
 
 ## 프로젝트 개요
-- **단일 파일 `mylang.cpp` (~3,300줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
+- **단일 파일 `mylang.cpp` (~3,400줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
 - 언어 스펙: `MYLANG_SPEC.md`(한국어) / `MYLANG_SPEC.en.md`(영어) — **기능 추가 시 두 문서 모두 갱신**.
 - 검증 프로젝트: `examples/rpg.my` (222줄 텍스트 RPG).
 - 웹 플레이그라운드: `docs/` (index.html + mylang.js + mylang.wasm) → GitHub Pages.
@@ -33,13 +33,14 @@ emcc -O2 -std=c++17 -fexceptions -DMYLANG_WASM mylang.cpp -o docs/mylang.js \
 ```
 
 ## 철칙: 듀얼 백엔드 동시 구현 + diff 검증
-언어 기능을 추가/수정하면 **반드시 인터프리터와 트랜스파일러(RUNTIME 문자열 + CodeGen) 양쪽에 구현**하고, 같은 프로그램을 두 방식으로 실행해 출력을 diff로 비교한다 (differential testing — 지금까지 코드젠 버그를 여러 개 잡아준 핵심 검증법):
+언어 기능을 추가/수정하면 **반드시 인터프리터와 트랜스파일러(RUNTIME 문자열 + CodeGen) 양쪽에 구현**하고, 같은 프로그램을 두 방식으로 실행해 출력을 diff로 비교한다 (differential testing — 지금까지 코드젠 버그를 여러 개 잡아준 핵심 검증법).
+
+**자동화됨**: `tests/run_tests.sh` 가 `tests/cases/*.my` 전체를 양쪽으로 실행해 비교하고, CI(`.github/workflows/ci.yml`)가 푸시마다 돌린다. 허용 차이(인터프리터 전용 `=== ===` 배너, catch 메시지의 `[줄 N]` 접두사)는 러너가 정규화로 흡수.
 ```bash
-./mylang test.my > i.txt
-./mylang build test.my && ./test > c.txt
-diff i.txt c.txt   # 반드시 일치 (예외: catch 변수의 에러 메시지 — 인터프리터만 [파일 줄 N] 접두사 포함)
+tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프리터 vs 빌드본 diff)
 ```
-에러 케이스(없는 키, 0 나누기, 인자 개수 등)도 양쪽에서 확인.
+- **기능 추가 시 테스트 케이스도 추가할 것.** 에러 케이스는 try/catch 로 잡아 출력으로 만들어 비교 (에러 문구도 양쪽 동일해야 함 — v1.5에서 산술 연산 문구 통일함).
+- 케이스에 random()/time() 사용 금지 (비결정적이라 diff 불가).
 
 ## 아키텍처 요점
 - `Value`: NUM/STR/LIST/MAP/OBJ. 리스트/딕셔너리/객체는 shared_ptr 참조 방식, `copy()`가 깊은 복사(순환 감지). 문자열 불변, UTF-8 글자 단위 인덱싱. **리스트 인덱스는 1부터.**
@@ -59,9 +60,12 @@ diff i.txt c.txt   # 반드시 일치 (예외: catch 변수의 에러 메시지 
 ## 현재 상태 & 남은 작업
 언어 v1.5 완성 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시). 저장소: github.com/Vpdrla/MyLang
 
-- [ ] `docs/` 3개 파일 업로드 + GitHub Pages 설정 (Settings→Pages→main `/docs`) → https://vpdrla.github.io/MyLang/ 확인
-- [ ] LICENSE 추가 (MIT)
+- [x] `docs/` 3개 파일 업로드 — **Pages 설정은 사용자가 직접**: Settings→Pages→main `/docs` → https://vpdrla.github.io/MyLang/ 확인
+- [x] LICENSE 추가 (MIT)
+- [x] 테스트 스위트 + CI (tests/run_tests.sh + GitHub Actions)
+- [x] MYLANG_SPEC.en.md, README.ko.md, examples/rpg.my, vscode-mylang/ 추가 (README 깨진 링크 해소)
 - [ ] README용 데모 GIF (셸 → RPG → build 30초)
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
-- [ ] 다음 언어 기능 후보 (사용자와 상의 후): 상속, 일급 함수, 문자열 포매팅 `"이름: {x}"`
+- [ ] 다음 언어 기능 후보 (사용자와 상의 후): 문자열 포매팅 `"이름: {x}"`, 리스트 `==`/`+`, 일급 함수, 상속
+- [ ] (리네임 확정 시) Mallang — 저장소 rename 후 문서/배너 일괄 치환
