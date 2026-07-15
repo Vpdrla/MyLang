@@ -7,7 +7,7 @@
 
 **▶ [Try it in your browser — no install needed](https://vpdrla.github.io/MyLang/)**
 
-![Demo: playing and building the example RPG](docs/demo.svg)
+![Demo: playing and building the example RPG](docs/demo.gif)
 
 A pseudocode-style programming language designed to be readable by non-programmers.
 Implemented in a single C++ file (~3,400 lines) with a **dual backend: a tree-walking interpreter and a C++ transpiler** that produces standalone native executables.
