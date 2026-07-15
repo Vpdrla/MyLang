@@ -1,11 +1,11 @@
-# MyLang
+# Venos
 
-[![CI](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml/badge.svg)](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml)
+[![CI](https://github.com/Vpdrla/Venos/actions/workflows/ci.yml/badge.svg)](https://github.com/Vpdrla/Venos/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 *[English](README.md) | 한국어*
 
-**▶ [브라우저에서 바로 써보기 — 설치 불필요](https://vpdrla.github.io/MyLang/)**
+**▶ [브라우저에서 바로 써보기 — 설치 불필요](https://vpdrla.github.io/Venos/)**
 
 ![데모: 예제 RPG 플레이 + 네이티브 빌드](docs/demo.gif)
 
@@ -38,7 +38,7 @@ class 사람 {
     func init(이름) { self.이름 = 이름 }
     func 인사() { print "안녕, 나는 " + self.이름 }
 }
-사람("성윤").인사()
+사람("미르").인사()
 ```
 
 ## 특징
@@ -51,15 +51,15 @@ class 사람 {
 
 ## 플레이그라운드
 
-[웹 플레이그라운드](https://vpdrla.github.io/MyLang/)는 WebAssembly로 인터프리터 전체를 브라우저에서 실행합니다 —
+[웹 플레이그라운드](https://vpdrla.github.io/Venos/)는 WebAssembly로 인터프리터 전체를 브라우저에서 실행합니다 —
 클래스, try/catch, 예제 RPG까지 전부 (input은 다이얼로그로 표시; `import`는 데스크톱 전용,
 파일 입출력은 메모리에만 저장되어 새로고침 시 사라짐).
 
 ## 빌드
 
 ```bash
-g++ -std=c++17 -O2 -o mylang mylang.cpp        # Linux / WSL
-g++ -std=c++17 -O2 -o mylang.exe mylang.cpp    # Windows (MinGW)
+g++ -std=c++17 -O2 -o venos venos.cpp        # Linux / WSL
+g++ -std=c++17 -O2 -o venos.exe venos.cpp    # Windows (MinGW)
 ```
 
 의존성 없음. C++17 필요 (C++20 호환).
@@ -67,20 +67,20 @@ g++ -std=c++17 -O2 -o mylang.exe mylang.cpp    # Windows (MinGW)
 ## 사용법
 
 ```bash
-mylang                      # 대화형 셸 (create / code / run / build ...)
-mylang 파일.my              # 파일 바로 실행 (인터프리터)
-mylang build 파일.my        # 네이티브 실행 파일로 컴파일 (g++ 필요)
-mylang build 파일.my run    # 컴파일 후 즉시 실행
+venos                      # 대화형 셸 (create / code / run / build ...)
+venos 파일.my              # 파일 바로 실행 (인터프리터)
+venos build 파일.my        # 네이티브 실행 파일로 컴파일 (g++ 필요)
+venos build 파일.my run    # 컴파일 후 즉시 실행
 ```
 
 셸에서 `repl` 을 입력하면 한 줄씩 실행하는 REPL이 시작됩니다 (식을 입력하면 값을 바로 표시).
 
-전체 언어 명세: **[MYLANG_SPEC.md](MYLANG_SPEC.md)** (한국어) / **[MYLANG_SPEC.en.md](MYLANG_SPEC.en.md)** (English).
-명세는 AI에게 그대로 건네주면 올바른 MyLang 코드를 짜줄 수 있게 작성되어 있습니다 (AI 바이브 코딩을 염두에 둔 설계).
+전체 언어 명세: **[VENOS_SPEC.md](VENOS_SPEC.md)** (한국어) / **[VENOS_SPEC.en.md](VENOS_SPEC.en.md)** (English).
+명세는 AI에게 그대로 건네주면 올바른 Venos 코드를 짜줄 수 있게 작성되어 있습니다 (AI 바이브 코딩을 염두에 둔 설계).
 
 ## 에디터 지원
 
-`vscode-mylang/` 폴더에 `.my` 파일 문법 강조를 지원하는 VS Code 확장이 들어 있습니다 —
+`vscode-venos/` 폴더에 `.my` 파일 문법 강조를 지원하는 VS Code 확장이 들어 있습니다 —
 폴더를 `~/.vscode/extensions/` 에 복사하면 됩니다 (폴더 안 README 참고).
 
 ## 예제
@@ -88,7 +88,7 @@ mylang build 파일.my run    # 컴파일 후 즉시 실행
 `examples/rpg.my` — 클래스, 딕셔너리, 파일 입출력 세이브/로드를 모두 활용하는 텍스트 RPG:
 
 ```bash
-mylang examples/rpg.my
+venos examples/rpg.my
 ```
 
 ## 아키텍처
@@ -98,7 +98,7 @@ mylang examples/rpg.my
                                           └→ C++ 코드 생성 → g++ → 네이티브 실행 파일
 ```
 
-렉서, 파서, AST, 인터프리터, 트랜스파일러, 런타임 라이브러리, CLI 셸 — 전부 단일 파일 `mylang.cpp` 안에 있습니다.
+렉서, 파서, AST, 인터프리터, 트랜스파일러, 런타임 라이브러리, CLI 셸 — 전부 단일 파일 `venos.cpp` 안에 있습니다.
 
 ## 만든 이유
 

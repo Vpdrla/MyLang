@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "MyLang",
-  "scopeName": "source.mylang",
+  "name": "Venos",
+  "scopeName": "source.venos",
   "patterns": [
     { "include": "#comment" },
     { "include": "#string" },
@@ -15,24 +15,24 @@
   ],
   "repository": {
     "comment": {
-      "name": "comment.line.number-sign.mylang",
+      "name": "comment.line.number-sign.venos",
       "match": "#.*$"
     },
     "string": {
-      "name": "string.quoted.double.mylang",
+      "name": "string.quoted.double.venos",
       "begin": "\"",
       "end": "\"",
       "patterns": [
         {
-          "name": "constant.character.escape.mylang",
+          "name": "constant.character.escape.venos",
           "match": "\\\\[nt\"\\\\]|\\{\\{|\\}\\}"
         },
         {
-          "name": "meta.embedded.interpolation.mylang",
+          "name": "meta.embedded.interpolation.venos",
           "begin": "\\{",
           "end": "\\}",
-          "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.mylang" } },
-          "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.mylang" } },
+          "beginCaptures": { "0": { "name": "punctuation.section.interpolation.begin.venos" } },
+          "endCaptures": { "0": { "name": "punctuation.section.interpolation.end.venos" } },
           "patterns": [
             { "include": "#number" },
             { "include": "#constant" },
@@ -44,35 +44,35 @@
       ]
     },
     "number": {
-      "name": "constant.numeric.mylang",
+      "name": "constant.numeric.venos",
       "match": "\\b\\d+(\\.\\d+)?\\b"
     },
     "keyword": {
       "patterns": [
         {
-          "name": "keyword.control.mylang",
+          "name": "keyword.control.venos",
           "match": "\\b(if|else|while|for|to|step|in|break|continue|return|try|catch|then|do)\\b"
         },
         {
-          "name": "keyword.other.mylang",
+          "name": "keyword.other.venos",
           "match": "\\b(let|func|class|print|input|import)\\b"
         },
         {
-          "name": "keyword.operator.logical.mylang",
+          "name": "keyword.operator.logical.venos",
           "match": "\\b(and|or|not)\\b"
         }
       ]
     },
     "constant": {
-      "name": "constant.language.mylang",
+      "name": "constant.language.venos",
       "match": "\\b(true|false)\\b"
     },
     "self": {
-      "name": "variable.language.self.mylang",
+      "name": "variable.language.self.venos",
       "match": "\\bself\\b"
     },
     "builtin": {
-      "name": "support.function.builtin.mylang",
+      "name": "support.function.builtin.venos",
       "match": "\\b(random|round|floor|ceil|abs|sqrt|min|max|num|str|len|push|pop|sort|remove|keys|has|split|join|upper|lower|find|replace|substr|readfile|writefile|appendfile|exists|time|exit|copy|error)(?=\\s*\\()"
     },
     "definition": {
@@ -80,21 +80,21 @@
         {
           "match": "\\b(func)\\s+([^\\s(){}\\[\\]\"#,]+)",
           "captures": {
-            "1": { "name": "keyword.other.mylang" },
-            "2": { "name": "entity.name.function.mylang" }
+            "1": { "name": "keyword.other.venos" },
+            "2": { "name": "entity.name.function.venos" }
           }
         },
         {
           "match": "\\b(class)\\s+([^\\s(){}\\[\\]\"#,]+)",
           "captures": {
-            "1": { "name": "keyword.other.mylang" },
-            "2": { "name": "entity.name.type.class.mylang" }
+            "1": { "name": "keyword.other.venos" },
+            "2": { "name": "entity.name.type.class.venos" }
           }
         }
       ]
     },
     "operator": {
-      "name": "keyword.operator.mylang",
+      "name": "keyword.operator.venos",
       "match": "\\+=|-=|\\*=|/=|==|!=|<=|>=|[+\\-*/%<>=]"
     }
   }

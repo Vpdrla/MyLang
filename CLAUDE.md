@@ -1,6 +1,6 @@
-# MyLang — Claude Code 작업 가이드
+# Venos — Claude Code 작업 가이드
 
-자작 프로그래밍 언어 MyLang의 저장소. 사용자(Justin, 중학생)와 Claude가 claude.ai 대화로 v0.1부터 여기까지 만들었고, 이후 작업은 Claude Code로 진행.
+자작 프로그래밍 언어 Venos의 저장소. 사용자(중학생)와 Claude가 claude.ai 대화로 v0.1부터 여기까지 만들었고, 이후 작업은 Claude Code로 진행.
 
 ## 대화 규칙
 - **한국어로 대화한다.** 간결하고 직설적으로 — 장황한 설명, 과한 칭찬, 불필요한 확인 질문 금지.
@@ -8,28 +8,28 @@
 - 코드 주석과 에러 메시지는 한국어 (언어 자체가 한국어 사용자 대상).
 
 ## 프로젝트 개요
-- **단일 파일 `mylang.cpp` (~3,400줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
-- 언어 스펙: `MYLANG_SPEC.md`(한국어) / `MYLANG_SPEC.en.md`(영어) — **기능 추가 시 두 문서 모두 갱신**.
+- **단일 파일 `venos.cpp` (~3,400줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
+- 언어 스펙: `VENOS_SPEC.md`(한국어) / `VENOS_SPEC.en.md`(영어) — **기능 추가 시 두 문서 모두 갱신**.
 - 검증 프로젝트: `examples/rpg.my` (222줄 텍스트 RPG).
-- 웹 플레이그라운드: `docs/` (index.html + mylang.js + mylang.wasm) → GitHub Pages.
-- VSCode 확장: `vscode-mylang/` — 새 키워드/내장함수 추가 시 tmLanguage도 갱신.
+- 웹 플레이그라운드: `docs/` (index.html + venos.js + venos.wasm) → GitHub Pages.
+- VSCode 확장: `vscode-venos/` — 새 키워드/내장함수 추가 시 tmLanguage도 갱신.
 
 ## 빌드/테스트 명령
 ```bash
 # 네이티브 (필수 통과: C++17과 C++20 둘 다)
-g++ -std=c++17 -O2 -Wall -o mylang mylang.cpp
-g++ -std=c++20 -O2 -fsyntax-only mylang.cpp
+g++ -std=c++17 -O2 -Wall -o venos venos.cpp
+g++ -std=c++20 -O2 -fsyntax-only venos.cpp
 
 # 실행
-./mylang 파일.my              # 인터프리터
-./mylang build 파일.my run    # 트랜스파일 → g++ → 실행
+./venos 파일.my              # 인터프리터
+./venos build 파일.my run    # 트랜스파일 → g++ → 실행
 
 # WASM (플레이그라운드 갱신 시)
-emcc -O2 -std=c++17 -fexceptions -DMYLANG_WASM mylang.cpp -o docs/mylang.js \
-  -s EXPORTED_FUNCTIONS=_mylang_run,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
+emcc -O2 -std=c++17 -fexceptions -DVENOS_WASM venos.cpp -o docs/venos.js \
+  -s EXPORTED_FUNCTIONS=_venos_run,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
   -s DISABLE_EXCEPTION_CATCHING=0 -s ALLOW_MEMORY_GROWTH=1 \
   -s TOTAL_STACK=33554432 -s INITIAL_MEMORY=67108864 \
-  -s MODULARIZE=1 -s EXPORT_NAME=createMyLang -s ENVIRONMENT=web
+  -s MODULARIZE=1 -s EXPORT_NAME=createVenos -s ENVIRONMENT=web
 ```
 
 ## 철칙: 듀얼 백엔드 동시 구현 + diff 검증
@@ -58,15 +58,15 @@ tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프
 - u8string은 C++17/20 타입이 달라서 바이트 복사로 처리 중.
 
 ## 현재 상태 & 남은 작업
-언어 v1.6 완성 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시/문자열 보간/리스트 ==·+). 저장소: github.com/Vpdrla/MyLang
+언어 v1.6 완성 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시/문자열 보간/리스트 ==·+). 저장소: github.com/Vpdrla/Venos
 
-- [x] `docs/` 3개 파일 업로드 — **Pages 설정은 사용자가 직접**: Settings→Pages→main `/docs` → https://vpdrla.github.io/MyLang/ 확인
+- [x] `docs/` 3개 파일 업로드 — **Pages 설정은 사용자가 직접**: Settings→Pages→main `/docs` → https://vpdrla.github.io/Venos/ 확인
 - [x] LICENSE 추가 (MIT)
 - [x] 테스트 스위트 + CI (tests/run_tests.sh + GitHub Actions)
-- [x] MYLANG_SPEC.en.md, README.ko.md, examples/rpg.my, vscode-mylang/ 추가 (README 깨진 링크 해소)
-- [x] README 데모 (애니메이션 SVG — 셸 → RPG → build 26초, docs/demo.svg)
+- [x] VENOS_SPEC.en.md, README.ko.md, examples/rpg.my, vscode-venos/ 추가 (README 깨진 링크 해소)
+- [x] README 데모 (GIF — RPG 플레이 → build 26초, docs/demo.gif, 한글 2칸 폭 렌더러로 제작)
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
 - [x] 문자열 보간 `"이름: {x}"`, 리스트 `==`(깊은 비교)/`+`(연결) — v1.6
 - [ ] 다음 언어 기능 후보 (사용자와 상의 후): 일급 함수, 상속, 음수 인덱스/슬라이스
-- [ ] (리네임 확정 시) Mallang — 저장소 rename 후 문서/배너 일괄 치환
+- [x] 리네임: MyLang → **Venos** (문서/배너/바이너리/확장 일괄 치환 완료. 저장소 rename(Settings→Rename→Venos)은 사용자가 직접 — 하기 전까지 README 링크·Pages URL은 새 주소 기준이라 404)
