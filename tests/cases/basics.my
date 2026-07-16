@@ -6,7 +6,7 @@ print "x =", x
 print "나이: " + 15
 print 7 / 2, 7 % 3, -3 + 1
 print "1줄\n2줄\t탭 \"따옴표\" 백슬래시\\"
-let 이름 = "성윤"
+let 이름 = "미르"
 print "안녕, " + 이름
 print 0.5 + 0.25
 print not 0, not 1, not "", not "a"

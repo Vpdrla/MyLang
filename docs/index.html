@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MyLang Playground — try it in your browser</title>
-<meta name="description" content="MyLang: a pseudocode-style programming language. Run it right here in your browser (WebAssembly).">
+<title>Venos Playground — try it in your browser</title>
+<meta name="description" content="Venos: a pseudocode-style programming language. Run it right here in your browser (WebAssembly).">
 <meta property="og:type" content="website">
-<meta property="og:title" content="MyLang Playground — try it in your browser">
+<meta property="og:title" content="Venos Playground — try it in your browser">
 <meta property="og:description" content="A pseudocode-style programming language with a dual backend (interpreter + C++ transpiler). Runs entirely in your browser via WebAssembly — no install needed.">
-<meta property="og:url" content="https://vpdrla.github.io/MyLang/">
+<meta property="og:url" content="https://vpdrla.github.io/Venos/">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="MyLang Playground — try it in your browser">
+<meta name="twitter:title" content="Venos Playground — try it in your browser">
 <meta name="twitter:description" content="A pseudocode-style programming language. Runs entirely in your browser via WebAssembly — no install needed.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>▶</text></svg>">
 <style>
@@ -76,9 +76,9 @@
 <body>
 
 <header>
-  <h1>MyLang Playground</h1>
+  <h1>Venos Playground</h1>
   <span class="sub">runs entirely in your browser (WebAssembly) · 설치 없이 브라우저에서 바로 실행</span>
-  <a href="https://github.com/Vpdrla/MyLang" target="_blank">GitHub ↗</a>
+  <a href="https://github.com/Vpdrla/Venos" target="_blank">GitHub ↗</a>
 </header>
 
 <div class="toolbar">
@@ -89,7 +89,7 @@
     <option value="class">Class / 클래스</option>
     <option value="dict">Dict + try/catch</option>
     <option value="guess">Game: 숫자 맞히기 (input)</option>
-    <option value="rpg">Game: 던전 오브 마이랭 (RPG)</option>
+    <option value="rpg">Game: 던전 오브 베노스 (RPG)</option>
   </select>
   <span class="hint">input uses a dialog · import is not available on the web · 파일 저장(writefile)은 새로고침하면 사라져요</span>
 </div>
@@ -104,14 +104,14 @@
       <span>output</span>
       <button id="clearBtn">clear</button>
     </div>
-    <div id="output"><span class="hint">loading MyLang… (~370KB)</span></div>
+    <div id="output"><span class="hint">loading Venos… (~370KB)</span></div>
   </div>
 </main>
 
-<script src="mylang.js"></script>
+<script src="venos.js"></script>
 <script>
 const EXAMPLES = {
-hello: `# Welcome to MyLang! / MyLang에 온 걸 환영해요
+hello: `# Welcome to Venos! / Venos에 온 걸 환영해요
 let 이름 = "world"
 print "Hello, {이름}!"          # 문자열 보간 / string interpolation
 
@@ -143,7 +143,7 @@ class 사람 {
     }
 }
 
-let p = 사람("성윤", 15)
+let p = 사람("미르", 15)
 p.인사()
 p.생일()
 print p`,
@@ -180,7 +180,7 @@ while true {
 }`,
 
 rpg: `# ================================================
-#  던전 오브 마이랭 — MyLang 텍스트 RPG
+#  던전 오브 베노스 — Venos 텍스트 RPG
 # ================================================
 
 class 플레이어 {
@@ -339,7 +339,7 @@ func 불러오기() {
 
 # ================= 게임 시작 =================
 print "================================"
-print "   던전 오브 마이랭 (MyLang RPG)"
+print "   던전 오브 베노스 (Venos RPG)"
 print "================================"
 print "[1] 새 게임  [2] 불러오기"
 let 시작 = input "> "
@@ -436,13 +436,13 @@ function append(text, cls) {
 }
 
 let M = null;
-createMyLang({
+createVenos({
   print: t => append(t, t.startsWith('!!') ? 'err' : (t.startsWith('===') ? 'ok' : '')),
   printErr: t => append(t, 'err'),
 }).then(mod => {
   M = mod;
   output.textContent = '';
-  append('MyLang ready. Press ▶ Run! / 준비 완료', 'ok');
+  append('Venos ready. Press ▶ Run! / 준비 완료', 'ok');
   runBtn.disabled = false;
 });
 
@@ -453,7 +453,7 @@ function run() {
   // 렌더링 한 프레임 양보 후 동기 실행 (실행 중엔 탭이 잠시 멈출 수 있음)
   setTimeout(() => {
     try {
-      M.ccall('mylang_run', null, ['string'], [editor.value]);
+      M.ccall('venos_run', null, ['string'], [editor.value]);
     } catch (e) {
       append('!! runtime error: ' + e, 'err');
     }

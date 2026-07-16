@@ -1,16 +1,16 @@
-# MyLang Language Specification (v1.6)
+# Venos Language Specification (v1.6)
 
-*English | [한국어](MYLANG_SPEC.md)*
+*English | [한국어](VENOS_SPEC.md)*
 
-Hand this document to an AI assistant and it can write valid MyLang code for you.
+Hand this document to an AI assistant and it can write valid Venos code for you.
 Source files use the `.my` extension, encoded in UTF-8.
 
 ## Running programs
 ```
-mylang program.my           # run directly (interpreter)
-mylang build program.my     # transpile to C++, compile with g++ → native executable
-mylang build program.my run # build, then run immediately
-mylang                      # interactive shell (create/choose/code/run/build/...)
+venos program.my           # run directly (interpreter)
+venos build program.my     # transpile to C++, compile with g++ → native executable
+venos build program.my run # build, then run immediately
+venos                      # interactive shell (create/choose/code/run/build/...)
 ```
 Inside the shell, `repl` starts a line-by-line REPL — type a bare expression to see its value.
 
@@ -23,7 +23,7 @@ Strings are **immutable** — `s[1] = "x"` is not allowed; build a new string wi
 ## Variables and assignment
 ```
 let x = 10          # declaration (omitting the initializer gives 0)
-let name = "Yun"    # identifiers may use any language (full UTF-8)
+let name = "Mir"    # identifiers may use any language (full UTF-8)
 x = 20              # assignment (must be declared with let first)
 x += 1              # += -= *= /= supported (also on list elements and object fields)
 ```
@@ -87,7 +87,7 @@ print xs == [10, 99, 30]   # == compares by content (deep equality)
 
 ## Dictionaries (keys are strings only)
 ```
-let d = {"name": "Yun", "age": 15}
+let d = {"name": "Mir", "age": 15}
 print d["name"]
 d["school"] = "middle school"   # new keys are created on assignment
 d["age"] += 1
@@ -104,10 +104,10 @@ class Person {
     func greet() { print "Hi, I am " + self.name }
     func birthday() { self.age += 1  self.greet() }   # self accesses fields/methods
 }
-let p = Person("Yun")          # the class name is the constructor
+let p = Person("Mir")          # the class name is the constructor
 p.greet()
 p.age = 15                     # fields can be read/written/created from outside
-print p                        # Person{"age": 15, "name": "Yun"}
+print p                        # Person{"age": 15, "name": "Mir"}
 ```
 No inheritance. For dictionaries use `["key"]`, not `.`.
 

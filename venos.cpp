@@ -1,9 +1,9 @@
 // ============================================================
-//  mylang.cpp — MyLang v1.6
+//  venos.cpp — Venos v1.6
 //  인터프리터 + C++ 트랜스파일러 + CLI 셸 + REPL + WASM
 //
-//  빌드:  g++ -std=c++17 -O2 -o mylang mylang.cpp   (C++20도 OK)
-//  언어 명세: MYLANG_SPEC.md / MYLANG_SPEC.en.md
+//  빌드:  g++ -std=c++17 -O2 -o venos venos.cpp   (C++20도 OK)
+//  언어 명세: VENOS_SPEC.md / VENOS_SPEC.en.md
 // ============================================================
 
 #include <iostream>
@@ -36,7 +36,7 @@
 #include <io.h>        // _isatty
 #undef IN
 #undef OUT             // winnt.h 의 빈 매크로 (옛 SAL 어노테이션) 제거
-#elif defined(MYLANG_WASM)
+#elif defined(VENOS_WASM)
 #include <emscripten.h>
 #else
 #include <pthread.h>
@@ -44,7 +44,7 @@
 #include <unistd.h>
 #endif
 
-#ifdef MYLANG_WASM
+#ifdef VENOS_WASM
 // 브라우저의 prompt() 다이얼로그로 입력 받기
 EM_JS(char*, js_prompt_raw, (const char* p), {
     var msg = UTF8ToString(p);
@@ -96,7 +96,7 @@ static const int MAX_RECURSION = 2000;   // 함수 재귀 깊이 제한
 //  플랫폼 헬퍼 — Windows 한글 입력/파일명 깨짐 방지
 // ============================================================
 static bool readLine(string& out) {
-#ifdef MYLANG_WASM
+#ifdef VENOS_WASM
     char* r = js_prompt_raw(g_pendingPrompt.c_str());
     out = r;
     free(r);
@@ -141,7 +141,7 @@ static void clearScreen() { std::cout << "\033[2J\033[3J\033[H" << std::flush; }
 
 static void drawBanner() {
     std::cout << "==========================================\n";
-    std::cout << "  MyLang Shell v1.6  (help 로 도움말)\n";
+    std::cout << "  Venos Shell v1.6  (help 로 도움말)\n";
     std::cout << "==========================================\n";
 }
 
@@ -155,7 +155,7 @@ static string trim(const string& s) {
 // ---- 방향키 스크롤용 raw 키 입력 ----
 enum Key { K_UP = 1000, K_DOWN, K_PGUP, K_PGDN, K_HOME, K_END, K_QUIT, K_OTHER };
 static int readKey() {
-#if defined(MYLANG_WASM)
+#if defined(VENOS_WASM)
     return K_QUIT;   // 웹에선 셸 뷰어를 쓰지 않음
 #elif defined(_WIN32)
     if (!_isatty(0)) {   // 파이프 입력이면 (테스트용) 한 줄 명령으로 대체
@@ -683,7 +683,7 @@ struct ListExpr : Expr {
     }
 };
 
-// 딕셔너리 리터럴: {"이름": "성윤", "나이": 15}
+// 딕셔너리 리터럴: {"이름": "미르", "나이": 15}
 struct MapExpr : Expr {
     std::vector<std::pair<ExprP, ExprP>> items;
     int line = 0;
@@ -860,7 +860,7 @@ struct InputExpr : Expr {
     string prompt;
     InputExpr(string p) : prompt(std::move(p)) {}
     Value eval(Env&) override {
-#ifdef MYLANG_WASM
+#ifdef VENOS_WASM
         g_pendingPrompt = prompt;
 #endif
         if (!prompt.empty()) std::cout << prompt << std::flush;
@@ -1043,7 +1043,7 @@ struct TryStmt : Stmt {
 struct WhileStmt : Stmt {
     ExprP cond; StmtP body;
     void exec(Env& env) override {
-#ifdef MYLANG_WASM
+#ifdef VENOS_WASM
         // 웹에선 무한 루프가 탭을 얼리므로 상한 유지. 네이티브는 상한 없음 (빌드본과 동작 일치)
         long long guard = 0;
 #endif
@@ -1051,7 +1051,7 @@ struct WhileStmt : Stmt {
             try { body->exec(env); }
             catch (ContinueSignal&) {}
             catch (BreakSignal&)    { break; }
-#ifdef MYLANG_WASM
+#ifdef VENOS_WASM
             if (++guard > 10'000'000)
                 throw LangError("반복 횟수가 너무 많습니다 (무한 루프?)");
 #endif
@@ -1442,7 +1442,7 @@ struct CallExpr : Expr {
             throw err("remove() 는 딕셔너리나 리스트에만 쓸 수 있습니다");
         }
 
-        // ---- 클래스 생성자: 사람("성윤", 15) ----
+        // ---- 클래스 생성자: 사람("미르", 15) ----
         auto cls = g_classes.find(name);
         if (cls != g_classes.end()) {
             Value obj;
@@ -2007,7 +2007,7 @@ void runSource(const string& src) {
 // 세그폴트 대신 깔끔한 에러 메시지가 나온다.)
 // ------------------------------------------------------------
 static void runOnBigStack(const std::function<void()>& job) {
-#ifdef MYLANG_WASM
+#ifdef VENOS_WASM
     job();
     return;
 #endif
@@ -2053,14 +2053,14 @@ static void runSourceBigStack(const string& src) {
 }
 
 // ============================================================
-//  5.5  CodeGen — MyLang AST → C++ 소스 코드 (트랜스파일러)
+//  5.5  CodeGen — Venos AST → C++ 소스 코드 (트랜스파일러)
 //
 //  같은 렉서/파서/AST를 재사용하고, eval/exec 대신
 //  "그 일을 하는 C++ 코드 문자열"을 뽑아낸다.
 //  생성된 .cpp 는 아래 RUNTIME(작은 런타임 라이브러리)을 앞에 붙여
 //  인터프리터와 동일한 값/에러 의미를 유지한다.
 // ============================================================
-static const char* RUNTIME = R"RT(// ---- MyLang 런타임 (자동 생성) ----
+static const char* RUNTIME = R"RT(// ---- Venos 런타임 (자동 생성) ----
 #include <iostream>
 #include <string>
 #include <vector>
@@ -3159,11 +3159,11 @@ static bool containsImport(const string& src) {
     return false;
 }
 
-#ifdef MYLANG_WASM
+#ifdef VENOS_WASM
 // ============================================================
 //  WASM 진입점 — 웹 플레이그라운드에서 호출
 // ============================================================
-extern "C" EMSCRIPTEN_KEEPALIVE void mylang_run(const char* code) {
+extern "C" EMSCRIPTEN_KEEPALIVE void venos_run(const char* code) {
     string src(code);
     // 에러 줄 표시용 소스 보관
     g_lineMap.clear();
@@ -3212,7 +3212,7 @@ static int braceDelta(const string& s) {
 // REPL — 한 줄씩 즉시 실행, 변수/함수/클래스는 세션 동안 유지
 void cmdRepl() {
     clearScreen();
-    std::cout << "=== MyLang REPL ===  (:q 나가기)\n";
+    std::cout << "=== Venos REPL ===  (:q 나가기)\n";
     std::cout << "한 줄씩 바로 실행됩니다. 값만 입력하면 결과를 출력해요 (예: 3 * 7)\n\n";
     Env env;
     g_funcs.clear();
@@ -3494,10 +3494,10 @@ void cmdHelp() {
         "  func add(a, b) { return a + b }     print add(3, 4)\n"
         "  class 사람 { func init(이름) { self.이름 = 이름 }\n"
         "              func 인사() { print self.이름 } }\n"
-        "  let p = 사람(\"성윤\")   p.인사()   p.나이 = 15   p.나이 += 1\n"
+        "  let p = 사람(\"미르\")   p.인사()   p.나이 = 15   p.나이 += 1\n"
         "  for ch in \"안녕\" { print ch }      for x in xs { print x }\n"
         "  let xs = [10, 20, 30]   print xs[1]   xs[2] += 5   print \"코딩\"[1]\n"
-        "  let d = {\"이름\": \"성윤\"}   d[\"나이\"] = 15   print d[\"이름\"]\n"
+        "  let d = {\"이름\": \"미르\"}   d[\"나이\"] = 15   print d[\"이름\"]\n"
         "  딕셔너리: keys(d) has(d,키) remove(d,키) len(d)  for k in d { }\n"
         "  리스트: push(xs,v) pop(xs) sort(xs) len(xs)\n"
         "  수학: random(1,6) round floor ceil abs sqrt min max\n"
@@ -3505,7 +3505,7 @@ void cmdHelp() {
         "  문자열: split join upper lower find replace substr\n"
         "  기타: readfile writefile appendfile exists(경로) time() exit()\n"
         "  import \"utils.my\"   try { } catch 오류 { }   error(\"메시지\")   copy(값)\n"
-        "  CLI: mylang 파일.my (바로 실행) / mylang build 파일.my run\n";
+        "  CLI: venos 파일.my (바로 실행) / venos build 파일.my run\n";
 }
 
 int main(int argc, char** argv) {
@@ -3518,10 +3518,10 @@ int main(int argc, char** argv) {
         SetConsoleMode(hOut, outMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 #endif
     // ---- CLI 모드: 셸 없이 파일 바로 실행/빌드 ----
-    //   mylang 파일.my            실행
-    //   mylang run 파일.my        실행
-    //   mylang build 파일.my      빌드
-    //   mylang build 파일.my run  빌드 후 실행
+    //   venos 파일.my            실행
+    //   venos run 파일.my        실행
+    //   venos build 파일.my      빌드
+    //   venos build 파일.my run  빌드 후 실행
     if (argc >= 2) {
         string a1 = argv[1];
         if (a1 == "build" && argc >= 3) {
@@ -3541,7 +3541,7 @@ int main(int argc, char** argv) {
     drawBanner();
     string line;
     while (true) {
-        std::cout << "\n" << (currentFile.empty() ? "mylang" : "mylang [" + currentFile + "]") << " $ " << std::flush;
+        std::cout << "\n" << (currentFile.empty() ? "venos" : "venos [" + currentFile + "]") << " $ " << std::flush;
         if (!readLine(line)) break;
 
         std::istringstream iss(line);
@@ -3567,4 +3567,4 @@ int main(int argc, char** argv) {
     std::cout << "종료합니다.\n";
     return 0;
 }
-#endif  // MYLANG_WASM 아님 (네이티브 셸 끝)
+#endif  // VENOS_WASM 아님 (네이티브 셸 끝)

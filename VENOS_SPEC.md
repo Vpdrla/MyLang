@@ -1,16 +1,16 @@
-# MyLang 언어 명세 (v1.6)
+# Venos 언어 명세 (v1.6)
 
-*[English](MYLANG_SPEC.en.md) | 한국어*
+*[English](VENOS_SPEC.en.md) | 한국어*
 
-AI에게 MyLang 코드를 짜달라고 할 때 이 문서를 함께 주면 됩니다.
+AI에게 Venos 코드를 짜달라고 할 때 이 문서를 함께 주면 됩니다.
 소스 파일 확장자는 `.my`, 인코딩은 UTF-8.
 
 ## 실행 방법
 ```
-mylang 파일.my              # 인터프리터로 바로 실행
-mylang build 파일.my        # C++ 로 변환 후 g++ 컴파일 → 네이티브 실행 파일
-mylang build 파일.my run    # 빌드 후 바로 실행
-mylang                      # 대화형 셸 (create/choose/code/run/build/...)
+venos 파일.my              # 인터프리터로 바로 실행
+venos build 파일.my        # C++ 로 변환 후 g++ 컴파일 → 네이티브 실행 파일
+venos build 파일.my run    # 빌드 후 바로 실행
+venos                      # 대화형 셸 (create/choose/code/run/build/...)
 ```
 셸에서 `repl` 을 입력하면 한 줄씩 실행하는 REPL 시작 — 식만 입력하면 값을 바로 보여줌.
 
@@ -23,7 +23,7 @@ mylang                      # 대화형 셸 (create/choose/code/run/build/...)
 ## 변수와 대입
 ```
 let x = 10          # 선언 (초기값 생략하면 0)
-let 이름 = "성윤"    # 한글 변수명 가능
+let 이름 = "미르"    # 한글 변수명 가능
 x = 20              # 대입 (let 으로 먼저 선언 필수)
 x += 1              # += -= *= /= 지원 (리스트 원소, 객체 필드에도 가능)
 ```
@@ -87,7 +87,7 @@ print xs == [10, 99, 30]   # == 는 내용 비교 (깊은 비교)
 
 ## 딕셔너리 (키는 문자열만)
 ```
-let d = {"이름": "성윤", "나이": 15}
+let d = {"이름": "미르", "나이": 15}
 print d["이름"]
 d["학교"] = "중학교"        # 새 키 자동 생성
 d["나이"] += 1
@@ -104,10 +104,10 @@ class 사람 {
     func 인사() { print "안녕, " + self.이름 }
     func 생일() { self.나이 += 1  self.인사() }   # self 로 필드/메서드 접근
 }
-let p = 사람("성윤")           # 클래스 이름이 생성자
+let p = 사람("미르")           # 클래스 이름이 생성자
 p.인사()
 p.나이 = 15                   # 필드는 밖에서도 읽기/쓰기/생성 가능
-print p                       # 사람{"나이": 15, "이름": "성윤"}
+print p                       # 사람{"나이": 15, "이름": "미르"}
 ```
 상속 없음. 딕셔너리에는 `.` 대신 `["키"]` 사용.
 

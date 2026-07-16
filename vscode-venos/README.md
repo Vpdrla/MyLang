@@ -1,6 +1,6 @@
-# MyLang for VS Code
+# Venos for VS Code
 
-`.my` 파일 문법 강조 (Syntax highlighting for MyLang).
+`.my` 파일 문법 강조 (Syntax highlighting for Venos).
 
 ## 설치 (Install)
 
@@ -8,10 +8,10 @@
 
 ```bash
 # Linux / macOS
-cp -r vscode-mylang ~/.vscode/extensions/mylang-1.6.0
+cp -r vscode-venos ~/.vscode/extensions/venos-1.6.0
 
 # Windows (PowerShell)
-Copy-Item -Recurse vscode-mylang $env:USERPROFILE\.vscode\extensions\mylang-1.6.0
+Copy-Item -Recurse vscode-venos $env:USERPROFILE\.vscode\extensions\venos-1.6.0
 ```
 
 VS Code를 재시작하면 `.my` 파일에 자동 적용됩니다.

@@ -1,13 +1,13 @@
 {
-  "name": "mylang",
-  "displayName": "MyLang",
-  "description": "Syntax highlighting for the MyLang programming language (.my)",
+  "name": "venos",
+  "displayName": "Venos",
+  "description": "Syntax highlighting for the Venos programming language (.my)",
   "version": "1.6.0",
   "publisher": "vpdrla",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vpdrla/MyLang"
+    "url": "https://github.com/Vpdrla/Venos"
   },
   "engines": {
     "vscode": "^1.70.0"
@@ -18,10 +18,10 @@
   "contributes": {
     "languages": [
       {
-        "id": "mylang",
+        "id": "venos",
         "aliases": [
-          "MyLang",
-          "mylang"
+          "Venos",
+          "venos"
         ],
         "extensions": [
           ".my"
@@ -31,9 +31,9 @@
     ],
     "grammars": [
       {
-        "language": "mylang",
-        "scopeName": "source.mylang",
-        "path": "./syntaxes/mylang.tmLanguage.json"
+        "language": "venos",
+        "scopeName": "source.venos",
+        "path": "./syntaxes/venos.tmLanguage.json"
       }
     ]
   }

@@ -18,7 +18,7 @@ print "sort:", ys
 remove(ys, 2)
 print "remove:", ys
 
-let d = {"이름": "성윤", "나이": 15}
+let d = {"이름": "미르", "나이": 15}
 d["학교"] = "중학교"
 d["나이"] += 1
 print d["이름"], d["나이"], len(d)

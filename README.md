@@ -1,13 +1,13 @@
-# MyLang
+# Venos
 
-[![CI](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml/badge.svg)](https://github.com/Vpdrla/MyLang/actions/workflows/ci.yml)
+[![CI](https://github.com/Vpdrla/Venos/actions/workflows/ci.yml/badge.svg)](https://github.com/Vpdrla/Venos/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 *English | [한국어](README.ko.md)*
 
-**▶ [Try it in your browser — no install needed](https://vpdrla.github.io/MyLang/)**
+**▶ [Try it in your browser — no install needed](https://vpdrla.github.io/Venos/)**
 
-![Demo: playing and building the example RPG](docs/demo.svg)
+![Demo: playing and building the example RPG](docs/demo.gif)
 
 A pseudocode-style programming language designed to be readable by non-programmers.
 Implemented in a single C++ file (~3,400 lines) with a **dual backend: a tree-walking interpreter and a C++ transpiler** that produces standalone native executables.
@@ -38,7 +38,7 @@ class 사람 {
     func init(이름) { self.이름 = 이름 }
     func 인사() { print "안녕, 나는 " + self.이름 }
 }
-사람("성윤").인사()
+사람("미르").인사()
 ```
 
 ## Features
@@ -53,15 +53,15 @@ class 사람 {
 
 ## Playground
 
-The [web playground](https://vpdrla.github.io/MyLang/) runs the full interpreter in your browser via WebAssembly —
+The [web playground](https://vpdrla.github.io/Venos/) runs the full interpreter in your browser via WebAssembly —
 including classes, try/catch, and even the example RPG (input pops up as a dialog; `import` is desktop-only,
 and file I/O writes to in-memory storage that resets on page reload).
 
 ## Build
 
 ```bash
-g++ -std=c++17 -O2 -o mylang mylang.cpp        # Linux / WSL
-g++ -std=c++17 -O2 -o mylang.exe mylang.cpp    # Windows (MinGW)
+g++ -std=c++17 -O2 -o venos venos.cpp        # Linux / WSL
+g++ -std=c++17 -O2 -o venos.exe venos.cpp    # Windows (MinGW)
 ```
 
 No dependencies. Requires C++17 (C++20 compatible).
@@ -69,20 +69,20 @@ No dependencies. Requires C++17 (C++20 compatible).
 ## Usage
 
 ```bash
-mylang                      # interactive shell (create / code / run / build ...)
-mylang program.my           # run a file directly (interpreter)
-mylang build program.my     # compile to a native executable (requires g++)
-mylang build program.my run # compile and run immediately
+venos                      # interactive shell (create / code / run / build ...)
+venos program.my           # run a file directly (interpreter)
+venos build program.my     # compile to a native executable (requires g++)
+venos build program.my run # compile and run immediately
 ```
 
 Inside the shell, `repl` starts a line-by-line REPL (type an expression to see its value).
 
-The full language reference: **[MYLANG_SPEC.en.md](MYLANG_SPEC.en.md)** (English) / **[MYLANG_SPEC.md](MYLANG_SPEC.md)** (한국어).
-The spec is written so you can hand it to an AI assistant and have it write valid MyLang code (designed with AI-assisted "vibe coding" in mind).
+The full language reference: **[VENOS_SPEC.en.md](VENOS_SPEC.en.md)** (English) / **[VENOS_SPEC.md](VENOS_SPEC.md)** (한국어).
+The spec is written so you can hand it to an AI assistant and have it write valid Venos code (designed with AI-assisted "vibe coding" in mind).
 
 ## Editor support
 
-`vscode-mylang/` contains a VS Code extension with syntax highlighting for `.my` files —
+`vscode-venos/` contains a VS Code extension with syntax highlighting for `.my` files —
 copy the folder into `~/.vscode/extensions/` (see its README).
 
 ## Example
@@ -90,7 +90,7 @@ copy the folder into `~/.vscode/extensions/` (see its README).
 `examples/rpg.my` — a text RPG (222 lines) exercising classes, dictionaries, and save/load via file I/O:
 
 ```bash
-mylang examples/rpg.my
+venos examples/rpg.my
 ```
 
 ## Architecture
@@ -100,7 +100,7 @@ source → lexer (tokens) → recursive-descent parser (AST) ─┬→ tree-walk
                                                           └→ C++ code generation → g++ → native executable
 ```
 
-Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and the CLI shell — lives in the single file `mylang.cpp`.
+Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and the CLI shell — lives in the single file `venos.cpp`.
 
 ## Why
 
