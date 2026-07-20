@@ -87,9 +87,11 @@ copy the folder into `~/.vscode/extensions/` (see its README).
 
 ## Example
 
-`examples/rpg.my` — a text RPG (222 lines) exercising classes, dictionaries, and save/load via file I/O:
+A text RPG exercising classes, dictionaries, string interpolation, and save/load via file I/O — in two flavors:
+`examples/rpg.en.my` (English identifiers, the one in the demo above) and `examples/rpg.my` (the same game written entirely with Korean identifiers):
 
 ```bash
+venos examples/rpg.en.my
 venos examples/rpg.my
 ```
 
