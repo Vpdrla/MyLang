@@ -85,10 +85,12 @@ venos build 파일.my run    # 컴파일 후 즉시 실행
 
 ## 예제
 
-`examples/rpg.my` — 클래스, 딕셔너리, 파일 입출력 세이브/로드를 모두 활용하는 텍스트 RPG:
+클래스, 딕셔너리, 문자열 보간, 파일 입출력 세이브/로드를 모두 활용하는 텍스트 RPG — 두 버전:
+`examples/rpg.my` (한국어 식별자) / `examples/rpg.en.my` (영어 식별자, 위 데모에 나오는 버전):
 
 ```bash
 venos examples/rpg.my
+venos examples/rpg.en.my
 ```
 
 ## 아키텍처

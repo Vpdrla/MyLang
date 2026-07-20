@@ -8,6 +8,7 @@ venos
 # build 명령이 생성하는 파일 (examples 폴더의 .my → .cpp/실행파일)
 examples/*.cpp
 examples/rpg
+examples/rpg.en
 
 # 테스트 산출물 (러너가 지우지만 중단 대비)
 tests/cases/*
