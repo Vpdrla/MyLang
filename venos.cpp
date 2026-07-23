@@ -3180,7 +3180,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void venos_run(const char* code) {
     }
     try {
         runSource(src);
-        std::cout << "=== 정상 종료 ===\n";
+        std::cout << "=== done ===\n";
     } catch (const LangError& e) {
         printError(e.what());
     } catch (const std::exception& e) {
@@ -3392,7 +3392,7 @@ void cmdCode() {
             std::cout << "\n----- 실행 결과 -----\n";
             try {
                 runSourceBigStack(expandImports(currentFile));   // 저장본 기준 (import 지원)
-                std::cout << "=== 정상 종료 ===\n";
+                std::cout << "=== done ===\n";
             } catch (const LangError& e) {
                 printError(e.what());
             } catch (const std::exception& e) {
@@ -3452,10 +3452,10 @@ void cmdCode() {
 
 void cmdRun() {
     if (currentFile.empty()) { std::cout << "choose 로 파일을 먼저 선택하세요\n"; return; }
-    std::cout << "=== 실행: " << currentFile << " ===\n";
+    std::cout << "=== running: " << currentFile << " ===\n";
     try {
         runSourceBigStack(expandImports(currentFile));
-        std::cout << "=== 정상 종료 ===\n";
+        std::cout << "=== done ===\n";
     } catch (const LangError& e) {
         printError(e.what());
     } catch (const std::exception& e) {
