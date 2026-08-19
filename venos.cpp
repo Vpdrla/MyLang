@@ -3105,7 +3105,7 @@ void cmdBuild(const string& arg) {
     string runCmd  = "./" + base;
 #endif
 
-    std::cout << "=== 빌드: " << fname << " ===\n";
+    std::cout << "=== build: " << fname << " ===\n";
     string cppCode;
     try {
         auto tokens = lex(expandImports(fname));
@@ -3114,32 +3114,32 @@ void cmdBuild(const string& arg) {
         CodeGen gen;
         cppCode = gen.generate(program);
     } catch (const LangError& e) {
-        printError(e.what(), "!! 변환 에러: ");
+        printError(e.what(), "!! codegen error: ");
         return;
     }
     {
         std::ofstream out(toPath(cppName));
         out << cppCode;
     }
-    std::cout << "C++ 변환 완료: " << cppName << "\n";
+    std::cout << "C++ generated: " << cppName << "\n";
     bool nonAscii = false;
     for (unsigned char ch : fname) if (ch >= 0x80) nonAscii = true;
     if (nonAscii)
-        std::cout << "(참고: 한글 파일명은 Windows 에서 g++ 호출이 실패할 수 있어요 — 영문 이름 권장)\n";
-    std::cout << "g++ 컴파일 중...\n";
+        std::cout << "(note: non-ASCII filenames can break the g++ call on Windows — ASCII names recommended)\n";
+    std::cout << "compiling with g++...\n";
     string compile = "g++ -std=c++17 -O2 -o \"" + exeName + "\" \"" + cppName + "\"";
     std::cout << std::flush;
     int rc = std::system(compile.c_str());
     if (rc != 0) {
-        std::cout << "!! g++ 컴파일 실패 (g++ 이 설치되어 있나요?)\n";
-        std::cout << "   변환된 C++ 파일은 남아 있으니 직접 컴파일할 수 있습니다: " << cppName << "\n";
+        std::cout << "!! g++ failed (is g++ installed?)\n";
+        std::cout << "   the generated C++ is still there, you can compile it yourself: " << cppName << "\n";
         return;
     }
-    std::cout << "빌드 성공: " << exeName << "  (실행: " << runCmd << ")\n";
+    std::cout << "build OK: " << exeName << "  (run: " << runCmd << ")\n";
     if (arg == "run") {
-        std::cout << "----- 실행 -----\n" << std::flush;
+        std::cout << "----- run -----\n" << std::flush;
         int rrc = std::system(runCmd.c_str());
-        if (rrc != 0) std::cout << "(프로그램이 " << rrc << " 코드로 종료됨)\n";
+        if (rrc != 0) std::cout << "(program exited with code " << rrc << ")\n";
     }
 }
 
@@ -3180,7 +3180,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE void venos_run(const char* code) {
     }
     try {
         runSource(src);
-        std::cout << "=== 정상 종료 ===\n";
+        std::cout << "=== done ===\n";
     } catch (const LangError& e) {
         printError(e.what());
     } catch (const std::exception& e) {
@@ -3392,7 +3392,7 @@ void cmdCode() {
             std::cout << "\n----- 실행 결과 -----\n";
             try {
                 runSourceBigStack(expandImports(currentFile));   // 저장본 기준 (import 지원)
-                std::cout << "=== 정상 종료 ===\n";
+                std::cout << "=== done ===\n";
             } catch (const LangError& e) {
                 printError(e.what());
             } catch (const std::exception& e) {
@@ -3452,10 +3452,10 @@ void cmdCode() {
 
 void cmdRun() {
     if (currentFile.empty()) { std::cout << "choose 로 파일을 먼저 선택하세요\n"; return; }
-    std::cout << "=== 실행: " << currentFile << " ===\n";
+    std::cout << "=== running: " << currentFile << " ===\n";
     try {
         runSourceBigStack(expandImports(currentFile));
-        std::cout << "=== 정상 종료 ===\n";
+        std::cout << "=== done ===\n";
     } catch (const LangError& e) {
         printError(e.what());
     } catch (const std::exception& e) {
