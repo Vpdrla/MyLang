@@ -40,6 +40,16 @@ emcc -O2 -std=c++17 -fexceptions -DVENOS_WASM venos.cpp -o docs/venos.js \
 ```bash
 tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프리터 vs 빌드본 diff)
 ```
+
+## 릴리스 내는 법
+버전을 올렸으면 태그만 밀면 된다. `.github/workflows/release.yml` 이 세 플랫폼 바이너리를 만들어 GitHub Releases 에 올린다.
+```bash
+git tag v1.6.0 && git push origin v1.6.0
+```
+- Linux/Windows 는 ubuntu 러너 한 곳에서 (Windows 는 MinGW 크로스 컴파일), macOS 는 전용 러너에서 유니버설(arm64+x86_64)로 빌드.
+- 전부 정적 링크 → 받는 사람은 설치할 게 없음. 릴리스로 나가는 바로 그 바이너리로 differential 스위트를 돌려 검증한다.
+- 태그 없이 시험만 하려면 Actions 에서 Release 워크플로를 `workflow_dispatch` 로 실행 (릴리스는 안 만들고 아티팩트만 남김).
+- **버전 문자열은 여러 곳에 하드코딩돼 있다** — 태그 전에 같이 고칠 것: `venos.cpp` 헤더 주석과 셸 배너, `VENOS_SPEC.md`/`.en.md` 제목, `vscode-venos/package.json`, README 2종.
 - **기능 추가 시 테스트 케이스도 추가할 것.** 에러 케이스는 try/catch 로 잡아 출력으로 만들어 비교 (에러 문구도 양쪽 동일해야 함 — v1.5에서 산술 연산 문구 통일함).
 - 케이스에 random()/time() 사용 금지 (비결정적이라 diff 불가).
 
@@ -69,7 +79,7 @@ tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프
 - [x] 교육용 1라운드: 플레이그라운드 공유 링크·자동 저장·WASM 로드 실패 처리 + 12단계 레슨 트랙 + TUTORIAL 자동 생성
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
-- [ ] **다음 라운드 1순위: 릴리스 자동화** — 태그 푸시 시 Windows/macOS/Linux 바이너리 빌드 → GitHub Releases. 지금은 태그·릴리스가 0개라 누구든 g++로 직접 컴파일해야만 쓸 수 있음
+- [x] 릴리스 자동화 (`.github/workflows/release.yml`) — 태그 푸시 → Linux/Windows/macOS 정적 바이너리 → GitHub Releases. **첫 태그(v1.6.0)는 아직 안 밀었음**
 - [ ] `input` 의 `window.prompt()` 모달 제거 (RPG가 수십 번 띄움 — Asyncify 또는 Worker 필요)
 - [ ] 에러 메시지에 오타 제안 ("정의되지 않은 변수: 이릅" → "혹시 '이름'?")
 - [ ] `docs/venos.js`·`venos.wasm` 을 CI에서 빌드 (현재 커밋된 수동 빌드본이라 소스와 어긋날 수 있음)

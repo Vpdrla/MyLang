@@ -1,0 +1,133 @@
+name: Release
+
+# 태그를 밀면 세 플랫폼 바이너리를 빌드해 GitHub Releases 에 올린다.
+#   git tag v1.6.0 && git push origin v1.6.0
+# workflow_dispatch 로 태그 없이 시험 실행도 가능하다 (그때는 릴리스를 만들지 않고 아티팩트만 남긴다).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # Linux 와 Windows 는 한 러너에서 만든다. Windows 는 MinGW 크로스 컴파일 —
+  # venos.cpp 의 windows.h/_beginthreadex/_getch 경로가 그대로 컴파일되는 것을 확인했다.
+  linux-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64
+
+      - name: Build Linux (static)
+        run: |
+          g++ -std=c++17 -O2 -Wall -Werror -static -o venos venos.cpp
+          file venos
+
+      # 릴리스로 나가는 바로 그 바이너리로 전체 differential 스위트를 돌린다
+      - name: Test the Linux binary
+        run: tests/run_tests.sh
+
+      - name: Build Windows (MinGW, static)
+        run: |
+          x86_64-w64-mingw32-g++ -std=c++17 -O2 -Wall -Werror -static -o venos.exe venos.cpp
+          file venos.exe
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p out
+          cp venos     out/venos-linux-x64
+          cp venos.exe out/venos-windows-x64.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: venos-linux-windows
+          path: out/*
+          if-no-files-found: error
+
+  # macOS 는 크로스 컴파일이 어려워 전용 러너에서. 인텔·애플실리콘 둘 다 도는 유니버설 바이너리로 만든다.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build macOS (universal, arm64 + x86_64)
+        run: |
+          clang++ -std=c++17 -O2 -Wall -Werror -arch arm64 -arch x86_64 -o venos venos.cpp
+          file venos
+
+      - name: Test the macOS binary
+        run: tests/run_tests.sh
+
+      - name: Stage artifact
+        run: |
+          mkdir -p out
+          cp venos out/venos-macos-universal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: venos-macos
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: [linux-windows, macos]
+    runs-on: ubuntu-latest
+    # 수동 시험 실행(workflow_dispatch)에서는 릴리스를 만들지 않는다
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+
+      - name: Collect binaries and checksums
+        run: |
+          mkdir -p out
+          find dl -type f -exec cp {} out/ \;
+          chmod +x out/venos-linux-x64 out/venos-macos-universal
+          cd out && sha256sum * > SHA256SUMS.txt
+          ls -lh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            Download the file for your machine, then run it — there is nothing else to install.
+
+            | Your machine | File |
+            |---|---|
+            | Windows | `venos-windows-x64.exe` |
+            | macOS (Intel or Apple Silicon) | `venos-macos-universal` |
+            | Linux | `venos-linux-x64` |
+
+            **Windows** — double-click the `.exe`, or run `venos-windows-x64.exe program.my` in a terminal.
+
+            **macOS / Linux** — make it executable first:
+
+            ```bash
+            chmod +x venos-macos-universal        # or venos-linux-x64
+            ./venos-macos-universal               # interactive shell
+            ./venos-macos-universal program.my    # run a file
+            ```
+
+            On macOS the first launch may be blocked because the binary is not
+            notarized — right-click the file and choose **Open**, or run
+            `xattr -d com.apple.quarantine venos-macos-universal`.
+
+            ### Notes
+
+            - These binaries are statically linked, so they carry no runtime dependencies.
+            - The interpreter works on its own. The `build` command (transpile to C++ and
+              compile to a native executable) additionally needs `g++` on your machine.
+            - Prefer nothing to install at all? Everything also runs in the browser:
+              **https://vpdrla.github.io/Venos/**
+            - New to the language? Start with the [tutorial](https://github.com/Vpdrla/Venos/blob/main/TUTORIAL.md)
+              ([한국어](https://github.com/Vpdrla/Venos/blob/main/TUTORIAL.ko.md)).
+
+            `SHA256SUMS.txt` lists the checksums of every file in this release.

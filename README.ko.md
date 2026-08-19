@@ -66,23 +66,38 @@ class 사람 {
 **[TUTORIAL.ko.md](TUTORIAL.ko.md)** — `print` 부터 숫자 맞히기 게임까지 12단계. 각 레슨은 클릭 한 번으로
 플레이그라운드에서 바로 실행됩니다. 영어판: [TUTORIAL.md](TUTORIAL.md).
 
-## 빌드
+## 설치
+
+[최신 릴리스](https://github.com/Vpdrla/Venos/releases/latest)에서 내 컴퓨터에 맞는 파일을 받으면 끝입니다.
+정적 링크라 따로 설치할 게 없어요.
+
+| 내 컴퓨터 | 받을 파일 |
+|---|---|
+| Windows | `venos-windows-x64.exe` |
+| macOS (인텔·애플실리콘 공용) | `venos-macos-universal` |
+| Linux | `venos-linux-x64` |
+
+macOS·Linux에서는 실행 권한을 먼저 주세요: `chmod +x venos-linux-x64`
+
+### 소스에서 빌드하려면
 
 ```bash
-g++ -std=c++17 -O2 -o venos venos.cpp        # Linux / WSL
+g++ -std=c++17 -O2 -o venos venos.cpp        # Linux / macOS / WSL
 g++ -std=c++17 -O2 -o venos.exe venos.cpp    # Windows (MinGW)
 ```
 
-의존성 없음. C++17 필요 (C++20 호환).
+의존성 없음. C++17 필요 (C++20 호환). GCC·Clang·MinGW 모두에서 경고 없이 빌드됩니다.
 
 ## 사용법
 
 ```bash
-venos                      # 대화형 셸 (create / code / run / build ...)
-venos 파일.my              # 파일 바로 실행 (인터프리터)
-venos build 파일.my        # 네이티브 실행 파일로 컴파일 (g++ 필요)
-venos build 파일.my run    # 컴파일 후 즉시 실행
+./venos                      # 대화형 셸 (create / code / run / build ...)
+./venos 파일.my              # 파일 바로 실행 (인터프리터)
+./venos build 파일.my        # 네이티브 실행 파일로 컴파일 (g++ 설치 필요)
+./venos build 파일.my run    # 컴파일 후 즉시 실행
 ```
+
+인터프리터는 그 자체로 완결돼 있고, `build` 명령만 `g++` 를 부릅니다.
 
 셸에서 `repl` 을 입력하면 한 줄씩 실행하는 REPL이 시작됩니다 (식을 입력하면 값을 바로 표시).
 
