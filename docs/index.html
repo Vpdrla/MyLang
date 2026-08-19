@@ -67,9 +67,38 @@
   #output .err { color: var(--err); }
   #output .ok { color: var(--accent2); }
   #clearBtn { font-size: 11px; padding: 2px 10px; }
+  #shareBtn { padding: 7px 14px; }
+  #shareMsg { color: var(--accent2); font-size: 12px; }
+
+  /* 레슨 띠 — 툴바 아래 전체 너비. 레슨 모드일 때만 보인다 */
+  #lessonBar {
+    display: none; padding: 12px 18px; gap: 10px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    flex-direction: column;
+  }
+  #lessonBar.on { display: flex; }
+  .lesson-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .lesson-step { color: var(--dim); font-size: 12px; }
+  .lesson-title { font-size: 15px; font-weight: 700; color: var(--accent2); }
+  .lesson-nav { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .lesson-nav button { font-size: 12px; padding: 4px 12px; }
+  .lesson-lang { background: none; border: none; color: var(--dim); font-size: 12px;
+                 text-decoration: underline; padding: 4px 2px; }
+  .lesson-lang:hover { color: var(--accent); }
+  #lessonDesc { font-size: 13px; line-height: 1.65; color: var(--text); max-width: 90ch; }
+  #lessonDesc p { margin: 0 0 6px; }
+  #lessonDesc code {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 5px; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px;
+  }
+  #lessonDesc strong { color: var(--accent2); }
+
   @media (max-width: 760px) {
     main { flex-direction: column; }
     .pane + .pane { border-left: none; border-top: 1px solid var(--border); }
+    #lessonBar { padding: 10px 14px; }
+    .lesson-nav { margin-left: 0; width: 100%; }
+    #lessonDesc { font-size: 12.5px; }
   }
 </style>
 </head>
@@ -83,6 +112,9 @@
 
 <div class="toolbar">
   <button id="runBtn" disabled>▶ Run (Ctrl+Enter)</button>
+  <select id="lessons">
+    <option value="">📚 Lessons / 레슨 …</option>
+  </select>
   <select id="examples">
     <option value="hello">Hello / basics</option>
     <option value="fib">Recursion (fib)</option>
@@ -91,7 +123,23 @@
     <option value="guess">Game: number guessing (input)</option>
     <option value="rpg">Game: Dungeon of Venos (RPG)</option>
   </select>
+  <button id="shareBtn" title="Copy a link that contains this program">🔗 Share</button>
+  <span id="shareMsg"></span>
   <span class="hint">input uses a dialog · import is not available on the web · writefile is in-memory only (resets on reload)</span>
+</div>
+
+<div id="lessonBar">
+  <div class="lesson-head">
+    <span class="lesson-step" id="lessonStep"></span>
+    <span class="lesson-title" id="lessonTitle"></span>
+    <span class="lesson-nav">
+      <button class="lesson-lang" id="lessonLang">English</button>
+      <button id="lessonPrev">← Prev</button>
+      <button id="lessonNext">Next →</button>
+      <button id="lessonExit">✕</button>
+    </span>
+  </div>
+  <div id="lessonDesc"></div>
 </div>
 
 <main>
@@ -108,6 +156,7 @@
   </div>
 </main>
 
+<script src="lessons.js"></script>
 <script src="venos.js"></script>
 <script>
 const EXAMPLES = {
@@ -412,9 +461,224 @@ const editor = document.getElementById('editor');
 const output = document.getElementById('output');
 const runBtn = document.getElementById('runBtn');
 const examples = document.getElementById('examples');
+const $ = id => document.getElementById(id);
 
-editor.value = EXAMPLES.hello;
-examples.onchange = () => { editor.value = EXAMPLES[examples.value]; };
+// ============================================================
+//  코드 ↔ URL  (해시에 담아 서버로 안 보내고, 정적 호스팅에서도 동작)
+//  형식: #code=<c|u><base64url>   c = deflate 압축, u = 무압축(폴백)
+// ============================================================
+const b64url = {
+  enc: bytes => btoa(String.fromCharCode(...bytes))
+                 .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+  dec: s => {
+    const b = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(b, c => c.charCodeAt(0));
+  }
+};
+
+async function encodeCode(code) {
+  const raw = new TextEncoder().encode(code);
+  if (typeof CompressionStream !== 'undefined') {
+    try {
+      const cs = new CompressionStream('deflate-raw');
+      const w = cs.writable.getWriter();
+      w.write(raw); w.close();
+      const packed = new Uint8Array(await new Response(cs.readable).arrayBuffer());
+      return 'c' + b64url.enc(packed);
+    } catch (e) { /* 구형 브라우저 → 무압축으로 폴백 */ }
+  }
+  return 'u' + b64url.enc(raw);
+}
+
+async function decodeCode(token) {
+  const mode = token[0], body = token.slice(1);
+  const bytes = b64url.dec(body);
+  if (mode === 'u') return new TextDecoder().decode(bytes);
+  if (mode !== 'c') throw new Error('unknown encoding');
+  const ds = new DecompressionStream('deflate-raw');
+  const w = ds.writable.getWriter();
+  w.write(bytes); w.close();
+  return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer());
+}
+
+// ============================================================
+//  자동 저장 — 탭을 닫아도 작업이 남는다
+// ============================================================
+const SAVE_KEY = 'venos.playground.v1';
+let pristine = '';        // 마지막으로 프로그램이 넣어준 코드 (수정 여부 판단용)
+let currentLesson = -1;   // -1 = 레슨 모드 아님
+
+const store = {
+  read() {
+    try { return JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); }
+    catch (e) { return null; }
+  },
+  write() {
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        code: editor.value, lesson: currentLesson, lang: lessonLang
+      }));
+    } catch (e) { /* 사생활 보호 모드 등 — 저장 실패는 조용히 무시 */ }
+  }
+};
+let saveTimer = null;
+editor.addEventListener('input', () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(store.write, 400);
+});
+
+const isDirty = () => editor.value.trim() !== pristine.trim();
+// isTemplate=true  : 예제/레슨 시작 코드처럼 "아직 사용자 것이 아닌" 코드 → 덮어써도 안전
+// isTemplate=false : 복원된 사용자 작업 → 처음부터 '수정됨'으로 보고 덮어쓰기 전에 물어본다
+function setCode(code, isTemplate) {
+  editor.value = code;
+  pristine = (isTemplate === false) ? ' ' : code;
+  store.write();
+}
+// 사용자가 고쳐놓은 코드를 날리기 전엔 반드시 물어본다
+function askThenSet(code) {
+  if (isDirty() && !confirm('고친 코드가 사라집니다. 계속할까요?\nYour edited code will be lost. Continue?')) return false;
+  setCode(code);
+  return true;
+}
+
+// ============================================================
+//  레슨 트랙
+// ============================================================
+let lessonLang = (navigator.language || 'en').startsWith('ko') ? 'ko' : 'en';
+const lessonBar = $('lessonBar');
+
+LESSONS.forEach((l, i) => {
+  const o = document.createElement('option');
+  o.value = String(i);
+  o.textContent = `${i + 1}. ${l.title[lessonLang] || l.title.en}`;
+  $('lessons').appendChild(o);
+});
+
+// 설명은 최소한의 마크다운만 렌더 (`코드`, **강조**, 빈 줄 = 문단)
+function renderDesc(text) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return text.split('\n\n').map(p =>
+    '<p>' + esc(p)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>') + '</p>'
+  ).join('');
+}
+
+function showLesson(i, opts) {
+  opts = opts || {};
+  if (i < 0 || i >= LESSONS.length) return;
+  const l = LESSONS[i];
+  if (opts.code === undefined) {          // 이어하기가 아니면 시작 코드로
+    if (!askThenSet(l.code)) return;
+  } else {
+    setCode(opts.code, false);            // 저장해둔 진행 중인 작업 복원 → 보호 대상
+  }
+  currentLesson = i;
+  lessonBar.classList.add('on');
+  $('lessonStep').textContent = `Lesson ${i + 1} / ${LESSONS.length}`;
+  $('lessonTitle').textContent = l.title[lessonLang] || l.title.en;
+  $('lessonDesc').innerHTML = renderDesc(l.desc[lessonLang] || l.desc.en);
+  $('lessons').value = String(i);
+  $('lessonPrev').disabled = (i === 0);
+  $('lessonNext').disabled = (i === LESSONS.length - 1);
+  $('lessonLang').textContent = lessonLang === 'ko' ? 'English' : '한국어';
+  if (!opts.keepHash) history.replaceState(null, '', '#lesson=' + l.id);
+  store.write();
+}
+
+function exitLesson() {
+  currentLesson = -1;
+  lessonBar.classList.remove('on');
+  $('lessons').value = '';
+  history.replaceState(null, '', location.pathname);
+  store.write();
+}
+
+$('lessons').onchange = e => {
+  const v = e.target.value;
+  if (v === '') { exitLesson(); return; }
+  const i = parseInt(v, 10);
+  const before = currentLesson;
+  showLesson(i);
+  if (currentLesson !== i) $('lessons').value = before >= 0 ? String(before) : '';  // 취소됨
+};
+$('lessonPrev').onclick = () => showLesson(currentLesson - 1);
+$('lessonNext').onclick = () => showLesson(currentLesson + 1);
+$('lessonExit').onclick = exitLesson;
+$('lessonLang').onclick = () => {
+  lessonLang = lessonLang === 'ko' ? 'en' : 'ko';
+  LESSONS.forEach((l, i) => {
+    $('lessons').options[i + 1].textContent = `${i + 1}. ${l.title[lessonLang] || l.title.en}`;
+  });
+  if (currentLesson >= 0) showLesson(currentLesson, { code: editor.value });
+  store.write();
+};
+
+// ============================================================
+//  공유 버튼
+// ============================================================
+$('shareBtn').onclick = async () => {
+  const msg = $('shareMsg');
+  try {
+    const url = location.origin + location.pathname + '#code=' + await encodeCode(editor.value);
+    try {
+      await navigator.clipboard.writeText(url);
+      msg.textContent = '링크 복사됨! / Link copied!';
+    } catch (e) {
+      // 클립보드가 막힌 환경(비-HTTPS 등) — 주소창에라도 남겨준다
+      history.replaceState(null, '', '#code=' + url.split('#code=')[1]);
+      msg.textContent = '주소창의 링크를 복사하세요 / Copy the link in the address bar';
+    }
+  } catch (e) {
+    msg.textContent = '링크 생성 실패 / Could not build link';
+  }
+  setTimeout(() => { msg.textContent = ''; }, 4000);
+};
+
+// ============================================================
+//  시작 시 무엇을 띄울까 — 우선순위: URL > 자동저장 > 기본 예제
+// ============================================================
+async function boot() {
+  const saved = store.read();
+  if (saved && saved.lang) lessonLang = saved.lang;
+  const hash = location.hash || '';
+
+  const codeMatch = hash.match(/^#code=(.+)$/);
+  if (codeMatch) {                                   // 공유 링크로 들어옴
+    try {
+      setCode(await decodeCode(decodeURIComponent(codeMatch[1])));
+      return;
+    } catch (e) { /* 깨진 링크면 아래 기본 경로로 */ }
+  }
+
+  const lessonMatch = hash.match(/^#lesson=([\w-]+)$/);
+  if (lessonMatch) {
+    const i = LESSONS.findIndex(l => l.id === lessonMatch[1]);
+    if (i >= 0) {
+      // 같은 레슨을 하던 중이었다면 그 작업을 이어서, 아니면 시작 코드로
+      const resume = (saved && saved.lesson === i && saved.code) ? saved.code : undefined;
+      pristine = editor.value;                       // confirm 안 뜨게
+      showLesson(i, { code: resume, keepHash: true });
+      return;
+    }
+  }
+
+  if (saved && saved.code) {                         // 그냥 재방문 → 하던 작업 복원
+    setCode(saved.code, false);                      // 사용자 작업이므로 덮어쓰기 전 확인 대상
+    if (saved.lesson >= 0 && saved.lesson < LESSONS.length)
+      showLesson(saved.lesson, { code: saved.code });
+    return;
+  }
+
+  setCode(EXAMPLES.hello);                           // 첫 방문
+}
+
+examples.onchange = e => {
+  if (!askThenSet(EXAMPLES[e.target.value])) return;
+  if (currentLesson >= 0) exitLesson();
+};
 document.getElementById('clearBtn').onclick = () => { output.textContent = ''; };
 
 // Tab 키로 4칸 들여쓰기
@@ -435,6 +699,9 @@ function append(text, cls) {
   output.scrollTop = output.scrollHeight;
 }
 
+// \uc5d0\ub514\ud130 \ub0b4\uc6a9\uc740 WASM \uacfc \ubb34\uad00\ud558\ubbc0\ub85c \uba3c\uc800 \ucc44\uc6b4\ub2e4 (\ub85c\ub4dc\uac00 \uc2e4\ud328\ud574\ub3c4 \ucf54\ub4dc\ub294 \ubcf4\uc778\ub2e4)
+boot();
+
 let M = null;
 createVenos({
   print: t => append(t, t.startsWith('!!') ? 'err' : (t.startsWith('===') ? 'ok' : '')),
@@ -444,6 +711,13 @@ createVenos({
   output.textContent = '';
   append('Venos ready. Press \u25b6 Run!', 'ok');
   runBtn.disabled = false;
+}).catch(err => {
+  // \uc608\uc804\uc5d4 \uc5ec\uae30\uc11c \uc2e4\ud328\ud558\uba74 "loading\u2026" \uc0c1\ud0dc\ub85c \uc601\uc6d0\ud788 \uba48\ucdb0 \uc788\uc5c8\ub2e4
+  output.textContent = '';
+  append('!! Venos\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4 / Failed to load Venos', 'err');
+  append('   ' + err, 'err');
+  append('   \uc0c8\ub85c\uace0\uce68\ud574 \ubcf4\uc138\uc694. \uacc4\uc18d \uc548 \ub418\uba74 \ub124\ud2b8\uc6cc\ud06c(\ubc29\ud654\ubcbd\u00b7\ud504\ub85d\uc2dc)\uac00 venos.wasm \uc744 \ub9c9\uace0 \uc788\uc744 \uc218 \uc788\uc5b4\uc694.');
+  append('   Try reloading. If it keeps failing, a firewall or proxy may be blocking venos.wasm.');
 });
 
 function run() {

@@ -57,6 +57,17 @@ The [web playground](https://vpdrla.github.io/Venos/) runs the full interpreter 
 including classes, try/catch, and even the example RPG (input pops up as a dialog; `import` is desktop-only,
 and file I/O writes to in-memory storage that resets on page reload).
 
+It is built to be usable in a classroom where nothing can be installed:
+
+- **🔗 Share** turns your program into a link, so a teacher can hand out a starting point and a student can hand back a result
+- **Your work is saved automatically** — closing the tab does not lose it
+- **📚 Lessons** walks a beginner through the language step by step, and every lesson has its own link (`#lesson=lists`)
+
+## Learning Venos
+
+**[TUTORIAL.md](TUTORIAL.md)** — 12 lessons from `print` to a small guessing game, each one runnable in the
+playground with a single click. Korean version: [TUTORIAL.ko.md](TUTORIAL.ko.md).
+
 ## Build
 
 ```bash

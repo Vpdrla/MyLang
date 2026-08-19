@@ -11,7 +11,8 @@
 - **단일 파일 `venos.cpp` (~3,400줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
 - 언어 스펙: `VENOS_SPEC.md`(한국어) / `VENOS_SPEC.en.md`(영어) — **기능 추가 시 두 문서 모두 갱신**.
 - 검증 프로젝트: `examples/rpg.my` (222줄 텍스트 RPG).
-- 웹 플레이그라운드: `docs/` (index.html + venos.js + venos.wasm) → GitHub Pages.
+- 웹 플레이그라운드: `docs/` (index.html + venos.js + venos.wasm) → GitHub Pages. 공유 링크(`#code=`), 자동 저장, 레슨 트랙(`#lesson=`) 포함.
+- 튜토리얼: **`docs/lessons.js` 가 단일 진실 공급원**. 레슨을 고쳤으면 `node tools/gen-tutorial.js` 로 `TUTORIAL.md`/`TUTORIAL.ko.md` 를 다시 생성할 것 (직접 편집 금지).
 - VSCode 확장: `vscode-venos/` — 새 키워드/내장함수 추가 시 tmLanguage도 갱신.
 
 ## 빌드/테스트 명령
@@ -65,8 +66,14 @@ tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프
 - [x] 테스트 스위트 + CI (tests/run_tests.sh + GitHub Actions)
 - [x] VENOS_SPEC.en.md, README.ko.md, examples/rpg.my, vscode-venos/ 추가 (README 깨진 링크 해소)
 - [x] README 데모 (GIF — RPG 플레이 → build 26초, docs/demo.gif, 한글 2칸 폭 렌더러로 제작)
+- [x] 교육용 1라운드: 플레이그라운드 공유 링크·자동 저장·WASM 로드 실패 처리 + 12단계 레슨 트랙 + TUTORIAL 자동 생성
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
+- [ ] **다음 라운드 1순위: 릴리스 자동화** — 태그 푸시 시 Windows/macOS/Linux 바이너리 빌드 → GitHub Releases. 지금은 태그·릴리스가 0개라 누구든 g++로 직접 컴파일해야만 쓸 수 있음
+- [ ] `input` 의 `window.prompt()` 모달 제거 (RPG가 수십 번 띄움 — Asyncify 또는 Worker 필요)
+- [ ] 에러 메시지에 오타 제안 ("정의되지 않은 변수: 이릅" → "혹시 '이름'?")
+- [ ] `docs/venos.js`·`venos.wasm` 을 CI에서 빌드 (현재 커밋된 수동 빌드본이라 소스와 어긋날 수 있음)
+- [ ] Windows/macOS CI 잡 (현재 ubuntu 전용인데 venos.cpp 엔 Windows 전용 코드가 상당량)
 - [x] 문자열 보간 `"이름: {x}"`, 리스트 `==`(깊은 비교)/`+`(연결) — v1.6
 - [ ] 다음 언어 기능 후보 (사용자와 상의 후): 일급 함수, 상속, 음수 인덱스/슬라이스
 - [x] 리네임: MyLang → **Venos** (문서/배너/바이너리/확장 일괄 치환 완료. 저장소 rename(Settings→Rename→Venos)은 사용자가 직접 — 하기 전까지 README 링크·Pages URL은 새 주소 기준이라 404)
