@@ -133,7 +133,7 @@ Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and
 ## Why
 
 I built this from scratch to understand how programming languages actually work.
-It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v1.6
+It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v0.6
 by writing real programs in it, finding what was missing, and adding it — the text RPG in
 `examples/` was the validation project that drove features like `exists()`, `try/catch`, and `import`.
 

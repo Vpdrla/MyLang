@@ -1,5 +1,5 @@
 // ============================================================
-//  venos.cpp — Venos v1.6
+//  venos.cpp — Venos v0.6.0
 //  인터프리터 + C++ 트랜스파일러 + CLI 셸 + REPL + WASM
 //
 //  빌드:  g++ -std=c++17 -O2 -o venos venos.cpp   (C++20도 OK)
@@ -141,7 +141,7 @@ static void clearScreen() { std::cout << "\033[2J\033[3J\033[H" << std::flush; }
 
 static void drawBanner() {
     std::cout << "==========================================\n";
-    std::cout << "  Venos Shell v1.6  (help 로 도움말)\n";
+    std::cout << "  Venos Shell v0.6.0  (help 로 도움말)\n";
     std::cout << "==========================================\n";
 }
 

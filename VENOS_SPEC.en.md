@@ -1,4 +1,4 @@
-# Venos Language Specification (v1.6)
+# Venos Language Specification (v0.6.0)
 
 *English | [한국어](VENOS_SPEC.md)*
 
