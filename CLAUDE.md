@@ -11,7 +11,8 @@
 - **단일 파일 `venos.cpp` (~3,400줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
 - 언어 스펙: `VENOS_SPEC.md`(한국어) / `VENOS_SPEC.en.md`(영어) — **기능 추가 시 두 문서 모두 갱신**.
 - 검증 프로젝트: `examples/rpg.my` (222줄 텍스트 RPG).
-- 웹 플레이그라운드: `docs/` (index.html + venos.js + venos.wasm) → GitHub Pages.
+- 웹 플레이그라운드: `docs/` (index.html + venos.js + venos.wasm) → GitHub Pages. 공유 링크(`#code=`), 자동 저장, 레슨 트랙(`#lesson=`) 포함.
+- 튜토리얼: **`docs/lessons.js` 가 단일 진실 공급원**. 레슨을 고쳤으면 `node tools/gen-tutorial.js` 로 `TUTORIAL.md`/`TUTORIAL.ko.md` 를 다시 생성할 것 (직접 편집 금지).
 - VSCode 확장: `vscode-venos/` — 새 키워드/내장함수 추가 시 tmLanguage도 갱신.
 
 ## 빌드/테스트 명령
@@ -39,6 +40,16 @@ emcc -O2 -std=c++17 -fexceptions -DVENOS_WASM venos.cpp -o docs/venos.js \
 ```bash
 tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프리터 vs 빌드본 diff)
 ```
+
+## 릴리스 내는 법
+버전을 올렸으면 태그만 밀면 된다. `.github/workflows/release.yml` 이 세 플랫폼 바이너리를 만들어 GitHub Releases 에 올린다.
+```bash
+git tag v0.6.0 && git push origin v0.6.0
+```
+- Linux/Windows 는 ubuntu 러너 한 곳에서 (Windows 는 MinGW 크로스 컴파일), macOS 는 전용 러너에서 유니버설(arm64+x86_64)로 빌드.
+- 전부 정적 링크 → 받는 사람은 설치할 게 없음. 릴리스로 나가는 바로 그 바이너리로 differential 스위트를 돌려 검증한다.
+- 태그 없이 시험만 하려면 Actions 에서 Release 워크플로를 `workflow_dispatch` 로 실행 (릴리스는 안 만들고 아티팩트만 남김).
+- **버전 문자열은 여러 곳에 하드코딩돼 있다** — 태그 전에 같이 고칠 것: `venos.cpp` 헤더 주석과 셸 배너, `VENOS_SPEC.md`/`.en.md` 제목, `vscode-venos/package.json`, README 2종.
 - **기능 추가 시 테스트 케이스도 추가할 것.** 에러 케이스는 try/catch 로 잡아 출력으로 만들어 비교 (에러 문구도 양쪽 동일해야 함 — v1.5에서 산술 연산 문구 통일함).
 - 케이스에 random()/time() 사용 금지 (비결정적이라 diff 불가).
 
@@ -58,15 +69,23 @@ tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프
 - u8string은 C++17/20 타입이 달라서 바이트 복사로 처리 중.
 
 ## 현재 상태 & 남은 작업
-언어 v1.6 완성 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시/문자열 보간/리스트 ==·+). 저장소: github.com/Vpdrla/Venos
+현재 v0.6.0 (변수/함수/클래스/리스트/딕셔너리/try-catch/import/copy/파일IO/REPL/CLI/에러 줄표시/문자열 보간/리스트 ==·+). 저장소: github.com/Vpdrla/Venos
+
+**버전 정책 — 임의로 올리지 말 것.** 0.x 는 "아직 안정화 전"이라는 뜻이고, **정식으로 완성됐다고 판단될 때 1.0.0** 을 붙인다 (사용자가 직접 결정). 그 전까지 기능을 추가해도 버전은 그대로 두고, 급한 버그 수정이 필요할 때만 자리수(0.6.1)를 올린다.
 
 - [x] `docs/` 3개 파일 업로드 — **Pages 설정은 사용자가 직접**: Settings→Pages→main `/docs` → https://vpdrla.github.io/Venos/ 확인
 - [x] LICENSE 추가 (MIT)
 - [x] 테스트 스위트 + CI (tests/run_tests.sh + GitHub Actions)
 - [x] VENOS_SPEC.en.md, README.ko.md, examples/rpg.my, vscode-venos/ 추가 (README 깨진 링크 해소)
 - [x] README 데모 (GIF — RPG 플레이 → build 26초, docs/demo.gif, 한글 2칸 폭 렌더러로 제작)
+- [x] 교육용 1라운드: 플레이그라운드 공유 링크·자동 저장·WASM 로드 실패 처리 + 12단계 레슨 트랙 + TUTORIAL 자동 생성
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
-- [x] 문자열 보간 `"이름: {x}"`, 리스트 `==`(깊은 비교)/`+`(연결) — v1.6
+- [x] 릴리스 자동화 (`.github/workflows/release.yml`) — 태그 푸시 → Linux/Windows/macOS 정적 바이너리 → GitHub Releases. **첫 태그 v0.6.0**
+- [ ] `input` 의 `window.prompt()` 모달 제거 (RPG가 수십 번 띄움 — Asyncify 또는 Worker 필요)
+- [ ] 에러 메시지에 오타 제안 ("정의되지 않은 변수: 이릅" → "혹시 '이름'?")
+- [ ] `docs/venos.js`·`venos.wasm` 을 CI에서 빌드 (현재 커밋된 수동 빌드본이라 소스와 어긋날 수 있음)
+- [ ] Windows/macOS CI 잡 (현재 ubuntu 전용인데 venos.cpp 엔 Windows 전용 코드가 상당량)
+- [x] 문자열 보간 `"이름: {x}"`, 리스트 `==`(깊은 비교)/`+`(연결) — v0.6.0
 - [ ] 다음 언어 기능 후보 (사용자와 상의 후): 일급 함수, 상속, 음수 인덱스/슬라이스
 - [x] 리네임: MyLang → **Venos** (문서/배너/바이너리/확장 일괄 치환 완료. 저장소 rename(Settings→Rename→Venos)은 사용자가 직접 — 하기 전까지 README 링크·Pages URL은 새 주소 기준이라 404)

@@ -1,4 +1,4 @@
-# Venos 언어 명세 (v1.6)
+# Venos 언어 명세 (v0.6.0)
 
 *[English](VENOS_SPEC.en.md) | 한국어*
 

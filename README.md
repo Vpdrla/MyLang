@@ -57,23 +57,49 @@ The [web playground](https://vpdrla.github.io/Venos/) runs the full interpreter 
 including classes, try/catch, and even the example RPG (input pops up as a dialog; `import` is desktop-only,
 and file I/O writes to in-memory storage that resets on page reload).
 
-## Build
+It is built to be usable in a classroom where nothing can be installed:
+
+- **🔗 Share** turns your program into a link, so a teacher can hand out a starting point and a student can hand back a result
+- **Your work is saved automatically** — closing the tab does not lose it
+- **📚 Lessons** walks a beginner through the language step by step, and every lesson has its own link (`#lesson=lists`)
+
+## Learning Venos
+
+**[TUTORIAL.md](TUTORIAL.md)** — 12 lessons from `print` to a small guessing game, each one runnable in the
+playground with a single click. Korean version: [TUTORIAL.ko.md](TUTORIAL.ko.md).
+
+## Install
+
+Grab a binary from the [latest release](https://github.com/Vpdrla/Venos/releases/latest) — it is
+statically linked, so there is nothing else to install.
+
+| Your machine | File |
+|---|---|
+| Windows | `venos-windows-x64.exe` |
+| macOS (Intel or Apple Silicon) | `venos-macos-universal` |
+| Linux | `venos-linux-x64` |
+
+On macOS and Linux, make it executable first: `chmod +x venos-linux-x64`.
+
+### Build from source instead
 
 ```bash
-g++ -std=c++17 -O2 -o venos venos.cpp        # Linux / WSL
+g++ -std=c++17 -O2 -o venos venos.cpp        # Linux / macOS / WSL
 g++ -std=c++17 -O2 -o venos.exe venos.cpp    # Windows (MinGW)
 ```
 
-No dependencies. Requires C++17 (C++20 compatible).
+No dependencies. Requires C++17 (C++20 compatible), and builds clean with GCC, Clang and MinGW.
 
 ## Usage
 
 ```bash
-venos                      # interactive shell (create / code / run / build ...)
-venos program.my           # run a file directly (interpreter)
-venos build program.my     # compile to a native executable (requires g++)
-venos build program.my run # compile and run immediately
+./venos                      # interactive shell (create / code / run / build ...)
+./venos program.my           # run a file directly (interpreter)
+./venos build program.my     # compile to a native executable (needs g++ installed)
+./venos build program.my run # compile and run immediately
 ```
+
+The interpreter is self-contained; only `build` shells out to `g++`.
 
 Inside the shell, `repl` starts a line-by-line REPL (type an expression to see its value).
 
@@ -107,7 +133,7 @@ Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and
 ## Why
 
 I built this from scratch to understand how programming languages actually work.
-It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v1.6
+It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v0.6
 by writing real programs in it, finding what was missing, and adding it — the text RPG in
 `examples/` was the validation project that drove features like `exists()`, `try/catch`, and `import`.
 

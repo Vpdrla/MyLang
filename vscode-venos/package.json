@@ -2,7 +2,7 @@
   "name": "venos",
   "displayName": "Venos",
   "description": "Syntax highlighting for the Venos programming language (.my)",
-  "version": "1.6.0",
+  "version": "0.6.0",
   "publisher": "vpdrla",
   "license": "MIT",
   "repository": {
