@@ -1,0 +1,120 @@
+# 파이썬 변환(topython)이 특히 틀리기 쉬운 자리들을 모아 둔 케이스.
+# 에러 문구에 기대지 않는다 — 세 백엔드(인터프리터/C++/파이썬)가 모두 같은 출력을 내야 한다.
+
+# --- 1부터 세는 인덱스: 리터럴과 식 둘 다 ---
+let xs = [10, 20, 30, 40, 50]
+print xs[1], xs[5]
+let i = 2
+print xs[i], xs[i + 1], xs[len(xs)]
+xs[1] = 11
+xs[i] += 5
+print xs
+
+# --- 중첩 리스트 ---
+let 격자 = [[1, 2, 3], [4, 5, 6]]
+격자[2][3] = 60
+print 격자[1][2], 격자[2][3]
+print 격자
+
+# --- 연산자 우선순위 (괄호를 잘못 붙이면 여기서 깨진다) ---
+print 2 + 3 * 4, (2 + 3) * 4
+print 10 - 3 - 2, 10 - (3 - 2)
+print 100 / 5 / 2, 100 / (5 / 2)
+print 7 % 3, -(2 + 3), - 4 + 1
+print 1 < 2 and 3 > 2, not 0, 1 or 0, not (1 and 0)
+
+# --- 문자열 보간: 식·중첩 괄호·이스케이프 ---
+let 이름 = "미르"
+let 나이 = 15
+print "{이름}은 내년에 {나이 + 1}살"
+print "{{중괄호}} 그대로, 값은 {나이}"
+print "합: {xs[1] + xs[2]}"
+
+# --- 문자열 + 숫자 자동 이어붙이기 ---
+print "나이: " + 나이
+print 나이 + 1 + "살"
+
+# --- 문자열 내장 함수 ---
+let s = "안녕하세요 반갑습니다"
+print len(s), s[1], substr(s, 2, 3)
+print find(s, "반갑"), find(s, "없음")
+print replace(s, " ", "-")
+print upper("abc"), lower("DEF")
+print split("a,b,c", ",")
+print join(["x", "y", "z"], "-")
+
+# --- 딕셔너리: 정렬 순회 + 키 조회 ---
+let 점수 = {"수학": 90, "국어": 80, "영어": 70}
+for 과목 in 점수 { print 과목, 점수[과목] }
+print keys(점수), has(점수, "수학"), has(점수, "과학")
+점수["과학"] = 60
+점수["수학"] += 5
+print 점수
+remove(점수, "국어")
+print 점수
+
+# --- for: 방향·step·식으로 준 범위 ---
+for a = 1 to 3 { print "a", a }
+for b = 3 to 1 { print "b", b }
+for c = 1 to 10 step 3 { print "c", c }
+for d = 10 to 1 step -4 { print "d", d }
+let 끝 = 3
+for e = 1 to 끝 { print "e", e }
+
+# --- while + break/continue ---
+let n = 0
+while n < 10 do {
+    n += 1
+    if n == 3 { continue }
+    if n == 6 { break }
+    print "n", n
+}
+
+# --- 함수: 재귀, 조기 return, 전역 쓰기 ---
+let 카운터 = 0
+func 세기() { 카운터 += 1  return 카운터 }
+func 팩토리얼(k) {
+    if k <= 1 then { return 1 }
+    return k * 팩토리얼(k - 1)
+}
+print 팩토리얼(6), 세기(), 세기(), 카운터
+
+# --- 클래스: 필드, 메서드, 객체 출력, 내용 비교 ---
+class 상자 {
+    func init(이름, 무게) { self.이름 = 이름  self.무게 = 무게 }
+    func 설명() { return "{self.이름}({self.무게}kg)" }
+    func 더하기(양) { self.무게 += 양 }
+}
+let 상자1 = 상자("사과", 3)
+let 상자2 = 상자("사과", 3)
+print 상자1.설명(), 상자1 == 상자2
+상자1.더하기(2)
+print 상자1.무게, 상자1 == 상자2
+print 상자1
+
+# --- 리스트 연결·깊은 비교·복사 ---
+let p = [1, [2, 3]]
+let q = copy(p)
+q[2][1] = 99
+print p, q, p == q, p == [1, [2, 3]]
+print [1, 2] + [3], len([1, 2] + [3])
+
+# --- 정렬·push·pop ---
+let 정렬 = [3, 1, 2]
+sort(정렬)
+push(정렬, 9)
+print 정렬, pop(정렬), 정렬
+
+# --- 파이썬 예약어/모듈 이름과 겹치는 변수 이름 (Venos 에선 멀쩡한 이름들) ---
+let lambda = 1
+let import = 2
+let def = 3
+let math = 4
+let sorted = 5
+print lambda + import + def + math + sorted
+func del(pass) { return pass * 2 }
+print del(21)
+
+# --- 반올림 계열 (음수 포함) ---
+print round(2.5), round(-2.5), floor(2.7), ceil(2.1), abs(-3), min(2, 5), max(2, 5)
+print sqrt(16), num("42"), str(7)

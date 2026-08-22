@@ -7,8 +7,14 @@
 - GitHub 공개 문서(README, 프로젝트 설명)는 **영어**로 쓰고, 한국어 번역본(`README.ko.md`)을 별도로 둔다.
 - 코드 주석과 에러 메시지는 한국어 (언어 자체가 한국어 사용자 대상).
 
+## 포지셔닝 — 이걸 어기지 말 것
+**Venos = 실행되는 의사코드 + 블록(엔트리)에서 파이썬으로 건너가는 다리.** 근거와 조사 내용은 `STRATEGY.md`/`.ko.md` 에 있다.
+- **범용 언어로 키우지 말 것.** 일급 함수·상속·모듈 시스템·표준 라이브러리·패키지 매니저는 전부 거부한다 — Pascal 이 교육용으로 성공했다가 "진짜 언어"가 되려다 죽은 경로다. 기능 판단 기준은 "있으면 좋은가"가 아니라 **"이게 없으면 교과서 알고리즘을 못 쓰는가"**.
+- **키워드는 영어로 유지.** 식별자만 한글 허용. 키워드를 한국어로 바꾸면 구조가 파이썬으로 안 넘어가서 다리 역할이 깨진다 (약속·와글·새싹이 실패한 이유).
+- `topython` 은 기능이자 약속이다 — 나가는 길을 직접 파는 언어는 슬그머니 종착지가 될 수 없다.
+
 ## 프로젝트 개요
-- **단일 파일 `venos.cpp` (~3,400줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③CLI 셸 ④REPL ⑤WASM 진입점.
+- **단일 파일 `venos.cpp` (~4,200줄)** 안에 전부 들어 있음: 렉서 → 재귀 하강 파서 → AST → ①트리워킹 인터프리터 ②C++ 트랜스파일러(`build` 명령, g++ 호출) ③파이썬 생성기(`topython`, `PyGen`) ④CLI 셸 ⑤REPL ⑥WASM 진입점.
 - 언어 스펙: `VENOS_SPEC.md`(한국어) / `VENOS_SPEC.en.md`(영어) — **기능 추가 시 두 문서 모두 갱신**.
 - 검증 프로젝트: `examples/rpg.my` (222줄 텍스트 RPG).
 - 웹 플레이그라운드: `docs/` (index.html + venos.js + venos.wasm) → GitHub Pages. 공유 링크(`#code=`), 자동 저장, 레슨 트랙(`#lesson=`) 포함.
@@ -24,19 +30,22 @@ g++ -std=c++20 -O2 -fsyntax-only venos.cpp
 # 실행
 ./venos 파일.my              # 인터프리터
 ./venos build 파일.my run    # 트랜스파일 → g++ → 실행
+./venos topython 파일.my     # 파이썬으로 변환 (.my → .py)
 
-# WASM (플레이그라운드 갱신 시)
-emcc -O2 -std=c++17 -fexceptions -DVENOS_WASM venos.cpp -o docs/venos.js \
-  -s EXPORTED_FUNCTIONS=_venos_run,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
+# WASM (플레이그라운드 갱신 시) — emcc 가 아니라 **em++** 로 부를 것.
+# 요즘 emsdk(6.0.8 확인)는 emcc 로 C++ 를 링크하면 operator delete 미정의로 죽는다.
+em++ -O2 -std=c++17 -fexceptions -DVENOS_WASM venos.cpp -o docs/venos.js \
+  -s EXPORTED_FUNCTIONS=_venos_run,_venos_topython,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
   -s DISABLE_EXCEPTION_CATCHING=0 -s ALLOW_MEMORY_GROWTH=1 \
   -s TOTAL_STACK=33554432 -s INITIAL_MEMORY=67108864 \
   -s MODULARIZE=1 -s EXPORT_NAME=createVenos -s ENVIRONMENT=web
 ```
 
-## 철칙: 듀얼 백엔드 동시 구현 + diff 검증
-언어 기능을 추가/수정하면 **반드시 인터프리터와 트랜스파일러(RUNTIME 문자열 + CodeGen) 양쪽에 구현**하고, 같은 프로그램을 두 방식으로 실행해 출력을 diff로 비교한다 (differential testing — 지금까지 코드젠 버그를 여러 개 잡아준 핵심 검증법).
+## 철칙: 백엔드 동시 구현 + diff 검증
+언어 기능을 추가/수정하면 **반드시 인터프리터와 트랜스파일러(RUNTIME 문자열 + CodeGen) 양쪽에 구현**하고, 같은 프로그램을 두 방식으로 실행해 출력을 diff로 비교한다 (differential testing — 지금까지 코드젠 버그를 여러 개 잡아준 핵심 검증법). **`PyGen`(topython)도 같이 갱신**한다 — 못 옮기는 문법이면 틀린 파이썬을 내지 말고 줄 번호와 함께 거절할 것.
 
-**자동화됨**: `tests/run_tests.sh` 가 `tests/cases/*.my` 전체를 양쪽으로 실행해 비교하고, CI(`.github/workflows/ci.yml`)가 푸시마다 돌린다. 허용 차이(인터프리터 전용 `=== ===` 배너, catch 메시지의 `[줄 N]` 접두사)는 러너가 정규화로 흡수.
+**자동화됨**: `tests/run_tests.sh` 가 `tests/cases/*.my` 전체를 **세 방식**(인터프리터 / C++ 빌드본 / topython → python3)으로 실행해 비교하고, CI(`.github/workflows/ci.yml`)가 푸시마다 돌린다. 허용 차이는 러너가 정규화로 흡수: 인터프리터 전용 `=== ===` 배너, catch 메시지의 `[줄 N]` 접두사, 소수 표기(양쪽을 `%g` 로 통일 — 파이썬은 `91.66666666666667`, Venos 는 `91.6667`).
+- 파이썬 비교를 건너뛰는 케이스는 러너의 `PY_SKIP` 에 이유와 함께 적혀 있다 (Venos 고유 에러 문구에 기대는 케이스들: errors/bugfixes/fileio/listops).
 ```bash
 tests/run_tests.sh   # 전체 스위트 (C++17 빌드 → 케이스별 인터프리터 vs 빌드본 diff)
 ```
@@ -86,8 +95,10 @@ git tag v0.6.0 && git push origin v0.6.0
 - [x] 릴리스 자동화 (`.github/workflows/release.yml`) — Linux/Windows/macOS 정적 바이너리 → GitHub Releases. **첫 릴리스 v0.6.0 게시됨** (https://github.com/Vpdrla/Venos/releases/tag/v0.6.0, 태그는 `1ca77d3`, 자산 4개, 전체 런 69초)
 - [ ] `input` 의 `window.prompt()` 모달 제거 (RPG가 수십 번 띄움 — Asyncify 또는 Worker 필요)
 - [ ] 에러 메시지에 오타 제안 ("정의되지 않은 변수: 이릅" → "혹시 '이름'?")
-- [ ] `docs/venos.js`·`venos.wasm` 을 CI에서 빌드 (현재 커밋된 수동 빌드본이라 소스와 어긋날 수 있음)
+- [ ] `docs/venos.js`·`venos.wasm` 을 CI에서 빌드 (현재 커밋된 수동 빌드본이라 소스와 어긋날 수 있음. 마지막 수동 빌드: emsdk 6.0.8, `em++`)
 - [ ] Windows 네이티브 CI 잡 — macOS 는 release.yml 에서 유니버설 빌드 + 스위트까지 돌지만, Windows exe 는 크로스 컴파일로 **빌드만** 되고 한 번도 실행되지 않는다 (ReadConsoleW·`IN`/`OUT` 매크로 회피·`_beginthreadex` 가 런타임 미검증). `windows-latest` 에서 스위트를 돌리려면 Git Bash·CRLF·콘솔 한글 인코딩부터 확인해야 함
 - [x] 문자열 보간 `"이름: {x}"`, 리스트 `==`(깊은 비교)/`+`(연결) — v0.6.0
-- [ ] 다음 언어 기능 후보 (사용자와 상의 후): 일급 함수, 상속, 음수 인덱스/슬라이스
+- [x] **포지셔닝 확정 + `topython`** — 조사(Portugol/HAGGIS/Pascal/2022 개정 교육과정) → `STRATEGY.md`, `PyGen`, 플레이그라운드 🐍 Python 버튼, 3중 differential
+- [ ] 교과서 알고리즘 예제집 (`examples/algorithms/`) — 선택정렬·이진탐색·최대공약수 등, 교과서 의사코드와 1:1. 포지셔닝을 증명하는 콘텐츠
+- [ ] ~~다음 언어 기능 후보: 일급 함수, 상속~~ — **포지셔닝상 거부**. 음수 인덱스/슬라이스만 재검토 여지 있음
 - [x] 리네임: MyLang → **Venos** (문서/배너/바이너리/확장 일괄 치환 완료. 저장소 rename(Settings→Rename→Venos)은 사용자가 직접 — 하기 전까지 README 링크·Pages URL은 새 주소 기준이라 404)

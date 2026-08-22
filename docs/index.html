@@ -112,6 +112,7 @@
 
 <div class="toolbar">
   <button id="runBtn" disabled>▶ Run (Ctrl+Enter)</button>
+  <button id="pyBtn" disabled title="See the same program written in Python">🐍 Python</button>
   <select id="lessons">
     <option value="">📚 Lessons / 레슨 …</option>
   </select>
@@ -125,7 +126,7 @@
   </select>
   <button id="shareBtn" title="Copy a link that contains this program">🔗 Share</button>
   <span id="shareMsg"></span>
-  <span class="hint">input uses a dialog · import is not available on the web · writefile is in-memory only (resets on reload)</span>
+  <span class="hint">🐍 Python shows the same program in Python · input uses a dialog · import is not available on the web · writefile is in-memory only (resets on reload)</span>
 </div>
 
 <div id="lessonBar">
@@ -703,14 +704,18 @@ function append(text, cls) {
 boot();
 
 let M = null;
+// Python 변환 결과를 그대로 복사할 수 있게 출력을 모아 둔다
+let capture = null;
 createVenos({
-  print: t => append(t, t.startsWith('!!') ? 'err' : (t.startsWith('===') ? 'ok' : '')),
+  print: t => { if (capture !== null) capture.push(t);
+                append(t, t.startsWith('!!') ? 'err' : (t.startsWith('===') ? 'ok' : '')); },
   printErr: t => append(t, 'err'),
 }).then(mod => {
   M = mod;
   output.textContent = '';
   append('Venos ready. Press \u25b6 Run!', 'ok');
   runBtn.disabled = false;
+  pyBtn.disabled = false;
 }).catch(err => {
   // \uc608\uc804\uc5d4 \uc5ec\uae30\uc11c \uc2e4\ud328\ud558\uba74 "loading\u2026" \uc0c1\ud0dc\ub85c \uc601\uc6d0\ud788 \uba48\ucdb0 \uc788\uc5c8\ub2e4
   output.textContent = '';
@@ -735,6 +740,30 @@ function run() {
   }, 30);
 }
 runBtn.onclick = run;
+
+// 같은 프로그램을 파이썬으로 보여 준다 — Venos 는 다음 언어로 가는 다리다
+function toPython() {
+  if (!M || pyBtn.disabled) return;
+  pyBtn.disabled = true;
+  output.textContent = '';
+  append('=== Python ===', 'ok');
+  capture = [];
+  try {
+    M.ccall('venos_topython', null, ['string'], [editor.value]);
+  } catch (e) {
+    append('!! conversion error: ' + e, 'err');
+  }
+  const text = capture.join('\n');
+  capture = null;
+  pyBtn.disabled = false;
+  if (text && !text.startsWith('!!') && navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      shareMsg.textContent = 'Python copied — paste it into any Python editor';
+      setTimeout(() => { shareMsg.textContent = ''; }, 4000);
+    }).catch(() => {});
+  }
+}
+pyBtn.onclick = toPython;
 </script>
 </body>
 </html>
