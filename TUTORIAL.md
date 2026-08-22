@@ -32,11 +32,11 @@ Variable and function names may be written in Korean (or any language), while ke
 Press ▶ Run, then change the text inside the quotes and run it again.
 
 ```
-# 첫 번째 Venos 프로그램
-print "안녕하세요!"
-print "반가워요 :)"
+# first Venos program
+print "Hello!"
+print "Hi :)"
 
-# 쉼표로 여러 값을 한 줄에
+# print multiple values with commas
 print "1 + 2 =", 1 + 2
 ```
 
@@ -51,6 +51,7 @@ Create a variable with `let`. **Names can be written in Korean** (or any languag
 Once created, assign to it without `let`, and use `+=` to add to it.
 
 Try changing `나이` (age) and running it again.
+이름 means 'name', and 미르 is a name.
 
 ```
 let 이름 = "미르"
@@ -59,7 +60,7 @@ let 나이 = 15
 print 이름
 print 나이
 
-나이 += 1          # 한 살 더
+나이 += 1          # age + 1
 print "내년 나이:", 나이
 ```
 
@@ -76,11 +77,11 @@ Inside a string, `{ }` inserts the value in it. That is **string interpolation**
 Run it and type any name into the dialog.
 
 ```
-let 이름 = input "이름이 뭐예요? "
-let 나이 = 15
+let name = input "What is your name? "
+let age = 15
 
-print "안녕하세요, {이름}님!"
-print "{이름}님은 내년에 {나이 + 1}살이 되네요."
+print "Hello, {name}!"
+print "{name} becomes {age + 1} next year."
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=input)**
@@ -93,20 +94,20 @@ print "{이름}님은 내년에 {나이 + 1}살이 되네요."
 
 `then` is optional — it is there only to make the line read like a sentence.
 
-Change `점수` (score) and see how the grade changes.
+Change `score` and see how the grade changes.
 
 ```
-let 점수 = 85
+let score = 85
 
-if 점수 >= 90 then {
-    print "A 등급"
+if score >= 90 then {
+    print "grade A"
 } else if 점수 >= 80 {
-    print "B 등급"
+    print "grade B"
 } else {
-    print "더 힘내요!"
+    print "Better Next Time!"
 }
 
-print "점수는 {점수}점입니다."
+print "The score is {score}"
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=if)**
@@ -122,17 +123,17 @@ Use `step` to skip, and a negative step to count down.
 Change the numbers to print a different multiplication table.
 
 ```
-# 3단 구구단
+# 3 times table
 for i = 1 to 9 {
     print "3 x {i} = {3 * i}"
 }
 
 print ""
-# 거꾸로 세기
+# backwards
 for i = 5 to 1 step -1 {
     print i
 }
-print "발사!"
+print "end!"
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=for)**
@@ -145,19 +146,19 @@ print "발사!"
 
 `break` leaves the loop immediately. Make sure the condition eventually becomes false, or the loop never ends.
 
-Change `남은돈` (money left) and see how many you can buy.
+Change `money left` and see how many you can buy.
 
 ```
-let 남은돈 = 1000
-let 가격 = 300
-let 개수 = 0
+let moneyleft = 50
+let price = 15
+let count = 0
 
-while 남은돈 >= 가격 do {
-    남은돈 -= 가격
-    개수 += 1
+while moneyleft >= price do {
+    moneyleft -= price
+    count += 1
 }
 
-print "{개수}개 샀고, {남은돈}원 남았어요."
+print "I bought {count} and I got {price} dollars left."
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=while)**
@@ -173,7 +174,7 @@ A list holds values in order. **Indices start at 1**, not 0!
 Try adding more fruit to the list.
 
 ```
-let 과일 = ["사과", "바나나", "포도"]
+let fruit = ["사과", "바나나", "포도"]
 
 print "첫 번째:", 과일[1]      # 1번부터!
 print "개수:", len(과일)
