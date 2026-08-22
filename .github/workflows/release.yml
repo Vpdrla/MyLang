@@ -1,12 +1,18 @@
 name: Release
 
 # 태그를 밀면 세 플랫폼 바이너리를 빌드해 GitHub Releases 에 올린다.
-#   git tag v1.6.0 && git push origin v1.6.0
-# workflow_dispatch 로 태그 없이 시험 실행도 가능하다 (그때는 릴리스를 만들지 않고 아티팩트만 남긴다).
+#   git tag v0.6.0 && git push origin v0.6.0
+# workflow_dispatch 로도 돌릴 수 있다 — tag 를 비워두면 빌드·테스트만 하고 릴리스는 만들지
+# 않는다. tag 를 채우면 그 이름으로 태그를 만들고 릴리스까지 낸다 (터미널 없이 릴리스할 때).
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: '릴리스로 만들 태그 (예: v0.6.0). 비우면 빌드만 하고 릴리스는 안 만든다.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -19,8 +25,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 메타패키지 g++-mingw-w64-x86-64 는 posix/win32 스레딩 변종을 둘 다 끌어와 144MB 를 받는다.
+      # venos.cpp 는 Windows 에서 _beginthreadex(Win32 API)만 쓰고 std::thread 는 안 쓰므로
+      # 변종은 아무거나 되고, posix 하나만 받으면 절반이면 된다.
+      # (Azure 미러가 32kB/s 로 죽어 이 단계가 75분 걸린 적이 있어 재시도도 켜 둔다.)
       - name: Install MinGW cross-compiler
-        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            -o Acquire::Retries=3 g++-mingw-w64-x86-64-posix
 
       - name: Build Linux (static)
         run: |
@@ -33,7 +46,7 @@ jobs:
 
       - name: Build Windows (MinGW, static)
         run: |
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -Wall -Werror -static -o venos.exe venos.cpp
+          x86_64-w64-mingw32-g++-posix -std=c++17 -O2 -Wall -Werror -static -o venos.exe venos.cpp
           file venos.exe
 
       - name: Stage artifacts
@@ -76,8 +89,9 @@ jobs:
   release:
     needs: [linux-windows, macos]
     runs-on: ubuntu-latest
-    # 수동 시험 실행(workflow_dispatch)에서는 릴리스를 만들지 않는다
-    if: startsWith(github.ref, 'refs/tags/')
+    # 태그를 밀었을 때, 또는 수동 실행에서 tag 를 채웠을 때만 릴리스를 만든다.
+    # tag 를 비운 수동 실행은 빌드·테스트만 하고 여기서 멈춘다.
+    if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -93,6 +107,8 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          # 태그 push 면 그 태그, 수동 실행이면 입력한 이름 (없는 태그는 이 커밋에 새로 만든다)
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: out/*
           generate_release_notes: true
           body: |
