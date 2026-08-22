@@ -115,6 +115,24 @@ print lambda + import + def + math + sorted
 func del(pass) { return pass * 2 }
 print del(21)
 
+# --- 내장 함수를 식 안에서 쓰기 (괄호를 안 씌우면 조용히 틀리는 자리들) ---
+let 글 = "abcdef"
+let 조각 = "abc"
+print find(글, "c") * 10                  # (s.find + 1) 을 통째로 묶어야 함
+print upper(조각 + "x"), lower("AB" + "CD")
+print len(split(조각 + ",d", ","))
+print pop([1, 2] + [3])
+print replace("x-y" + "-z", "-", "+")
+print keys({"b": 1, "a": 2})
+print not 0 == 1, (1 and 1) + 5, not (1 or 0)
+
+# --- 소수가 섞인 for (step 을 정수로 깎으면 range(a,b,0) 으로 죽는다) ---
+for 반 = 1 to 2 step 0.5 { print "반", 반 }
+for 소수 = 1.5 to 3.5 { print "소수", 소수 }
+
+# --- 루프 변수를 안에서 바꾸기 (더 이상 정수가 아니다) ---
+for k = 1 to 2 { k = k / 2  print k }
+
 # --- 반올림 계열 (음수 포함) ---
 print round(2.5), round(-2.5), floor(2.7), ceil(2.1), abs(-3), min(2, 5), max(2, 5)
 print sqrt(16), num("42"), str(7)

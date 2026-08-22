@@ -3115,6 +3115,7 @@ struct PyGen {
     bool sawIndex = false;                   // [ ] 인덱싱을 쓰는가 (머리말에 1부터 얘기를 넣을지)
     bool sawMod = false;                     // % 를 쓰는가
     bool sawFloat = false;                   // 소수가 나올 수 있는가 (/ · sqrt · 입력 등)
+    bool lastRangeIsInt = false;             // 방금 만든 for 범위가 진짜 range() 인가 (rangeOf 가 설정)
 
 
     static LangError err(int line, const string& m) {
@@ -3166,11 +3167,9 @@ struct PyGen {
     // ---- 우선순위 (Venos 와 파이썬이 같은 순서라 괄호를 최소로 낼 수 있다) ----
     enum { P_OR = 0, P_AND, P_NOT, P_CMP, P_ADD, P_MUL, P_UNARY, P_ATOM };
     static int precOf(Expr* e) {
-        if (dynamic_cast<LogicalExpr*>(e)) {
-            auto* l = static_cast<LogicalExpr*>(e);
-            return l->op == Tok::AND ? P_AND : P_OR;
-        }
-        if (dynamic_cast<NotExpr*>(e)) return P_NOT;
+        // not/and/or 는 int(...) 로 감싸서 내보내므로 밖에서 보면 원자다 (괄호가 필요 없다)
+        if (dynamic_cast<LogicalExpr*>(e)) return P_ATOM;
+        if (dynamic_cast<NotExpr*>(e))     return P_ATOM;
         if (auto* b = dynamic_cast<BinExpr*>(e)) {
             if (b->interpN > 0) return P_ATOM;          // f-string 은 원자
             switch (b->op) {
@@ -3341,9 +3340,9 @@ struct PyGen {
         }
         if (auto* n = dynamic_cast<NegExpr*>(e))  return "-" + wrap(n->inner.get(), P_UNARY);
         // Venos 의 not/and/or 는 1/0 을 낸다 — 파이썬 bool 이 그대로 찍히지 않도록 int() 로 맞춘다
-        if (auto* n = dynamic_cast<NotExpr*>(e))  return "int(not " + wrap(n->inner.get(), P_NOT) + ")";
+        if (auto* n = dynamic_cast<NotExpr*>(e))  return "int(not " + wrap(n->inner.get(), P_NOT + 1) + ")";
         if (auto* lg = dynamic_cast<LogicalExpr*>(e)) {
-            int p = precOf(lg);
+            int p = (lg->op == Tok::AND) ? P_AND : P_OR;   // 내부 자식용 (밖에서는 원자)
             string op = (lg->op == Tok::AND) ? " and " : " or ";
             return "int(bool(" + wrap(lg->lhs.get(), p) + ")" + op
                  + "bool(" + wrap(lg->rhs.get(), p + 1) + "))";
@@ -3369,6 +3368,9 @@ struct PyGen {
 
     string call(CallExpr* c) {
         auto A = [&](size_t i) { return expr(c->args[i].get()); };
+        // .메서드() 를 붙일 인자는 원자로 만들어야 한다.
+        // upper(a + b) → (a + b).upper()  (괄호가 없으면 b.upper() 가 되어 조용히 틀린다)
+        auto atom = [&](size_t i) { return wrap(c->args[i].get(), P_ATOM); };
         size_t n = c->args.size();
         const string& f = c->name;
         auto argsJoined = [&]() {
@@ -3397,17 +3399,20 @@ struct PyGen {
         if (f == "num")   { need2(1); sawFloat = true; return need("num")  + "(" + A(0) + ")"; }
         if (f == "str")   { need2(1); return need("show") + "(" + A(0) + ")"; }
         if (f == "push")  { need2(2); sawList = true; return need("push") + "(" + A(0) + ", " + A(1) + ")"; }
-        if (f == "pop")   { need2(1); return A(0) + ".pop()"; }
+        if (f == "pop")   { need2(1); return atom(0) + ".pop()"; }
         if (f == "sort")  { need2(1); sawList = true; return need("sort") + "(" + A(0) + ")"; }
-        if (f == "keys")  { need2(1); sawMap = true; sawList = true; return "sorted(" + A(0) + ".keys())"; }
-        if (f == "has")   { need2(2); sawMap = true; return "int(" + A(1) + " in " + A(0) + ")"; }
+        if (f == "keys")  { need2(1); sawMap = true; sawList = true; return "sorted(" + atom(0) + ".keys())"; }
+        if (f == "has")   { need2(2); sawMap = true;
+                            return "int(" + wrap(c->args[1].get(), P_CMP + 1) + " in "
+                                          + wrap(c->args[0].get(), P_CMP + 1) + ")"; }
         if (f == "remove"){ need2(2); return need("remove") + "(" + A(0) + ", " + A(1) + ")"; }
-        if (f == "split") { need2(2); sawList = true; return A(0) + ".split(" + A(1) + ")"; }
+        if (f == "split") { need2(2); sawList = true; return atom(0) + ".split(" + A(1) + ")"; }
         if (f == "join")  { need2(2); return need("join") + "(" + A(0) + ", " + A(1) + ")"; }
-        if (f == "upper") { need2(1); return A(0) + ".upper()"; }
-        if (f == "lower") { need2(1); return A(0) + ".lower()"; }
-        if (f == "find")  { need2(2); return A(0) + ".find(" + A(1) + ") + 1"; }
-        if (f == "replace"){need2(3); return A(0) + ".replace(" + A(1) + ", " + A(2) + ")"; }
+        if (f == "upper") { need2(1); return atom(0) + ".upper()"; }
+        if (f == "lower") { need2(1); return atom(0) + ".lower()"; }
+        // find 는 + 1 이 붙으므로 통째로 괄호를 씌운다 (find(s,x) * 10 이 s.find(x) + 1 * 10 이 되면 안 된다)
+        if (f == "find")  { need2(2); return "(" + atom(0) + ".find(" + A(1) + ") + 1)"; }
+        if (f == "replace"){need2(3); return atom(0) + ".replace(" + A(1) + ", " + A(2) + ")"; }
         if (f == "substr"){ need2(3); return need("substr") + "(" + A(0) + ", " + A(1) + ", " + A(2) + ")"; }
         if (f == "readfile")  { need2(1); return need("readfile")   + "(" + A(0) + ")"; }
         if (f == "writefile") { need2(2); return need("writefile")  + "(" + A(0) + ", " + A(1) + ")"; }
@@ -3425,6 +3430,8 @@ struct PyGen {
     // 대입 대상이 전역이면 함수 안에서 global 선언이 필요하다
     void noteAssign(const string& name) {
         if (inFunc && !localSet.count(name) && globalSet.count(name)) touchedGlobals.insert(name);
+        // for 루프 변수에 다시 대입하면 더 이상 정수라고 볼 수 없다
+        intVars.erase(name);
     }
 
     // 경로 대입의 앞부분: xs[1][2] / obj.필드 를 파이썬 좌변으로
@@ -3444,6 +3451,7 @@ struct PyGen {
     void stmt(Stmt* s, std::ostringstream& o, int d) {
         if (auto* l = dynamic_cast<LetStmt*>(s)) {
             if (inFunc) localSet.insert(l->name);
+            intVars.erase(l->name);
             o << pad(d) << pyName(l->name) << " = " << expr(l->val.get()) << "\n";
             return;
         }
@@ -3545,7 +3553,9 @@ struct PyGen {
             if (inFunc) localSet.insert(f->var);
             o << pad(d) << "for " << pyName(f->var) << " in " << rangeOf(f) << ":\n";
             bool had = intVars.count(f->var) > 0;
-            intVars.insert(f->var);            // range 가 내주는 값이라 항상 정수
+            // 진짜 range() 를 쓸 때만 정수다. step 0.5 처럼 소수가 섞이면 _rng 가 소수를 내준다.
+            bool isInt = lastRangeIsInt;
+            if (isInt) intVars.insert(f->var);
             body(f->body.get(), o, d + 1);
             if (!had) intVars.erase(f->var);
             return;
@@ -3577,14 +3587,17 @@ struct PyGen {
         string a = expr(f->start.get()), b = expr(f->end.get());
         double sa, sb, st;
         bool ka = constInt(f->start.get(), sa), kb = constInt(f->end.get(), sb);
+        lastRangeIsInt = true;
         if (!f->step) {
             if (ka && kb)                       // 둘 다 상수면 방향이 확정된다
                 return sa <= sb ? "range(" + a + ", " + pyNum(sb + 1) + ")"
                                 : "range(" + a + ", " + pyNum(sb - 1) + ", -1)";
+            lastRangeIsInt = false;             // _rng 는 소수도 내줄 수 있다
             return need("rng") + "(" + a + ", " + b + ")";
         }
         if (kb && constInt(f->step.get(), st) && st != 0)
             return "range(" + a + ", " + pyNum(sb + (st > 0 ? 1 : -1)) + ", " + pyNum(st) + ")";
+        lastRangeIsInt = false;
         return need("rng") + "(" + a + ", " + b + ", " + expr(f->step.get()) + ")";
     }
 
@@ -3782,8 +3795,14 @@ struct PyGen {
             {"random","def _random(a, b):\n    a, b = int(a), int(b)\n    if a > b: a, b = b, a\n    return random.randint(a, b)\n"},
             {"rng",
              "def _rng(a, b, s=1):\n"
-             "    a, b, s = int(a), int(b), int(s)\n"
-             "    return range(a, b + (1 if s > 0 else -1), s)\n"},
+             "    if a == int(a) and b == int(b) and s == int(s):\n"
+             "        a, b, s = int(a), int(b), int(s)\n"
+             "        return range(a, b + (1 if s > 0 else -1), s)\n"
+             "    out, x = [], a\n"
+             "    while (x <= b) if s > 0 else (x >= b):\n"
+             "        out.append(x)\n"
+             "        x += s\n"
+             "    return out\n"},
             {"iter",  "def _iter(v):\n    return sorted(v) if isinstance(v, dict) else v\n"},
             {"error", "def _error(m):\n    raise Exception(m)\n"},
             {"exit",  "def _exit():\n    sys.exit(0)\n"},

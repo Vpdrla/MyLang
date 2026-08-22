@@ -335,3 +335,4 @@ while true {
 - The full syntax lives in the [language spec](VENOS_SPEC.en.md).
 - A bigger example: [`examples/rpg.en.my`](examples/rpg.en.my) — a 227-line text RPG built from what you just learned.
 - Use the **🔗 Share** button in the playground to turn your program into a link you can send to a friend or teacher.
+- **When you are ready for the next language**: the **🐍 Python** button (or `venos topython program.my`) rewrites what you just wrote as Python, keeping your own variable and function names.

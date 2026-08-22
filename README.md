@@ -17,7 +17,7 @@ a real text language: unfamiliar syntax, English-only names, error messages they
 removes those three obstacles without hiding how programming actually works — and then hands you
 over: **`venos topython` rewrites any Venos program as readable Python.**
 
-Implemented in a single C++ file (~4,200 lines) with three backends: a tree-walking interpreter, a
+Implemented in a single C++ file (~4,400 lines) with three backends: a tree-walking interpreter, a
 C++ transpiler that produces standalone native executables, and a Python emitter.
 
 ```
@@ -54,7 +54,7 @@ class 사람 {
 - **Readable syntax** — `if x > 5 then { }`, `for i = 1 to 10`, `while x > 0 do { }`; optional filler keywords (`then`, `do`) make code read like pseudocode
 - **Three ways to run** — an interpreter for instant feedback, a transpiler (`.my` → C++ → native executable via g++), and a Python emitter (`.my` → `.py`). All three are differential-tested to produce identical output for the same program
 - **A way out** — `venos topython` writes your program as idiomatic Python, so nothing you learn here is thrown away
-- **A complete language** — functions (recursion, hoisting), classes (constructors, methods, `self`), lists and dictionaries (reference semantics, deep equality with `==`, `+` to join lists, `copy()` for deep copies), string interpolation (`"name: {x}"`), UTF-8-aware string handling, `try/catch`, `import`, file I/O, and 30+ built-in functions
+- **Enough language to write real programs** — functions (recursion, hoisting), classes (constructors, methods, `self`), lists and dictionaries (reference semantics, deep equality with `==`, `+` to join lists, `copy()` for deep copies), string interpolation (`"name: {x}"`), UTF-8-aware string handling, `try/catch`, `import`, file I/O, and 30+ built-in functions
 - **Helpful errors** — error messages with line numbers; with `import`, errors point to the original file (`[utils.my line 3]`). Undefined variables and wrong argument counts are caught at build time
 - **Built-in dev environment** — a CLI shell with file management, an editor (arrow-key scroll viewer, paste mode), and one-command run/build
 
