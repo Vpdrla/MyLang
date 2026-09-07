@@ -725,9 +725,16 @@ createVenos({
   append('   Try reloading. If it keeps failing, a firewall or proxy may be blocking venos.wasm.');
 });
 
+// 앞선 실행이 도중에 죽었으면 개행 없는 프롬프트가 emscripten stdout 버퍼에 남아 있다.
+// 지워질 옛 출력으로 흘려보내고 새 실행을 깨끗하게 시작한다.
+function drainStale() {
+  try { M.ccall('venos_flush', null, [], []); } catch (e) {}
+}
+
 function run() {
   if (!M || runBtn.disabled) return;
   runBtn.disabled = true;
+  drainStale();
   output.textContent = '';
   // 렌더링 한 프레임 양보 후 동기 실행 (실행 중엔 탭이 잠시 멈출 수 있음)
   setTimeout(() => {
@@ -745,6 +752,7 @@ runBtn.onclick = run;
 function toPython() {
   if (!M || pyBtn.disabled) return;
   pyBtn.disabled = true;
+  drainStale();
   output.textContent = '';
   append('=== Python ===', 'ok');
   capture = [];
