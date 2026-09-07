@@ -833,6 +833,10 @@ struct MethodCallExpr : Expr {   // obj.메서드(인자들) — 정의는 Class
 };
 struct BinExpr : Expr {
     Tok op; ExprP lhs, rhs; int line;
+    // 문자열 보간 "이름: {x}" 은 파싱 시점에 ("" + "이름: ") + x 로 풀린다.
+    // 그러면 f-string 으로 되돌릴 정보가 사라지므로, 체인의 루트에만 조각 수를 남긴다.
+    // 인터프리터와 C++ 백엔드는 이 값을 보지 않는다 — PyGen 만 쓴다.
+    int interpN = 0;
     BinExpr(Tok op, ExprP l, ExprP r, int ln)
         : op(op), lhs(std::move(l)), rhs(std::move(r)), line(ln) {}
     Value eval(Env& env) override {
@@ -1902,6 +1906,7 @@ struct Parser {
         ExprP out = std::make_unique<StrExpr>("");
         for (auto& p : parts)
             out = std::make_unique<BinExpr>(Tok::PLUS, std::move(out), std::move(p), line);
+        static_cast<BinExpr*>(out.get())->interpN = (int)parts.size();
         return out;
     }
 
@@ -3088,6 +3093,741 @@ struct CodeGen {
     }
 };
 
+// ============================================================
+//  파이썬 변환기 (topython) — "다음 언어로 나가는 길"
+//  C++ 백엔드(CodeGen)와 목표가 정반대다: 맹글링도 런타임 라이브러리도 없이
+//  **사람이 읽는 파이썬**을 낸다. 학생이 자기 프로그램을 알아볼 수 있어야 한다.
+//  파이썬 3 식별자는 한글을 그대로 받으므로 변수/함수 이름이 살아남는다.
+//  Venos 와 파이썬이 다른 지점은 숨기지 않고 파일 머리말에 적어 둔다.
+// ============================================================
+struct PyGen {
+    std::set<string> imports;                // math, random, time, os, sys, copy
+    std::set<string> helpers;                // 실제로 쓴 도우미만 앞에 붙인다
+    std::map<string, FuncStmt*> funcs;
+    std::map<string, ClassStmt*> classes;
+    std::set<string> globalSet;              // 최상위에서 만들어지는 변수
+    std::set<string> localSet;               // 현재 함수의 지역 (인자 + let)
+    std::set<string> touchedGlobals;         // 현재 함수가 대입한 전역 → global 선언
+    std::set<string> intVars;                // for i = a to b 로 묶인 변수 (range 라 항상 정수)
+    bool inFunc = false;
+    bool sawMap = false;                     // 딕셔너리가 존재할 수 있는가 (1차 통과에서 알아낸다)
+    bool sawList = false;                    // 리스트가 존재할 수 있는가
+    bool sawIndex = false;                   // [ ] 인덱싱을 쓰는가 (머리말에 1부터 얘기를 넣을지)
+    bool sawMod = false;                     // % 를 쓰는가
+    bool sawFloat = false;                   // 소수가 나올 수 있는가 (/ · sqrt · 입력 등)
+    bool lastRangeIsInt = false;             // 방금 만든 for 범위가 진짜 range() 인가 (rangeOf 가 설정)
+
+
+    static LangError err(int line, const string& m) {
+        return LangError(lineTag(line) + m);
+    }
+    static LangError nope(int line, const string& what) {
+        return LangError(lineTag(line) + "파이썬으로 변환할 수 없습니다: " + what);
+    }
+
+    // ---- 이름 ----
+    // 파이썬 예약어와, 우리가 앞에 붙이는 도우미/모듈 이름을 피한다.
+    static bool taken(const string& n) {
+        static const std::set<string> R = {
+            "False","None","True","and","as","assert","async","await","break","class",
+            "continue","def","del","elif","else","except","finally","for","from","global",
+            "if","import","in","is","lambda","nonlocal","not","or","pass","raise","return",
+            "try","while","with","yield",
+            "math","random","time","os","sys","copy",   // 우리가 import 하는 모듈
+            "print","input","len","abs","min","max","range","sorted","int","float","str",
+        };
+        return R.count(n) > 0 || (n.size() > 1 && n[0] == '_');
+    }
+    static string pyName(const string& n) { return taken(n) ? n + "_" : n; }
+
+    // 문자열 리터럴 → 파이썬 소스
+    static string pyStr(const string& s) {
+        string o = "\"";
+        for (char c : s) {
+            switch (c) {
+                case '"':  o += "\\\""; break;
+                case '\\': o += "\\\\"; break;
+                case '\n': o += "\\n";  break;
+                case '\t': o += "\\t";  break;
+                case '\r': o += "\\r";  break;
+                default:   o += c;
+            }
+        }
+        return o + "\"";
+    }
+    // 숫자 리터럴 — 정수는 정수로 낸다 (그래야 파이썬에서도 5 가 5 로 찍힌다)
+    static string pyNum(double v) {
+        char b[64];
+        if (std::fabs(v) < 9.0e18 && v == (long long)v) snprintf(b, sizeof b, "%lld", (long long)v);
+        else                                            snprintf(b, sizeof b, "%.17g", v);
+        return b;
+    }
+    string need(const string& h) { helpers.insert(h); return "_" + h; }
+
+    // ---- 우선순위 (Venos 와 파이썬이 같은 순서라 괄호를 최소로 낼 수 있다) ----
+    enum { P_OR = 0, P_AND, P_NOT, P_CMP, P_ADD, P_MUL, P_UNARY, P_ATOM };
+    static int precOf(Expr* e) {
+        // not/and/or 는 int(...) 로 감싸서 내보내므로 밖에서 보면 원자다 (괄호가 필요 없다)
+        if (dynamic_cast<LogicalExpr*>(e)) return P_ATOM;
+        if (dynamic_cast<NotExpr*>(e))     return P_ATOM;
+        if (auto* b = dynamic_cast<BinExpr*>(e)) {
+            if (b->interpN > 0) return P_ATOM;          // f-string 은 원자
+            switch (b->op) {
+                case Tok::STAR: case Tok::SLASH: case Tok::PERCENT: return P_MUL;
+                case Tok::PLUS: case Tok::MINUS:                    return P_ADD;
+                default:                                            return P_CMP;
+            }
+        }
+        if (dynamic_cast<NegExpr*>(e)) return P_UNARY;
+        return P_ATOM;
+    }
+    string wrap(Expr* e, int parentPrec) {
+        string s = expr(e);
+        return precOf(e) < parentPrec ? "(" + s + ")" : s;
+    }
+
+    // 문자열이 확실한 식인가 — Venos 의 "문자열 + 숫자" 자동 변환을 어디서 흉내낼지 판단
+    static bool stringish(Expr* e) {
+        if (dynamic_cast<StrExpr*>(e)) return true;
+        if (auto* b = dynamic_cast<BinExpr*>(e))
+            return b->interpN > 0
+                || (b->op == Tok::PLUS && (stringish(b->lhs.get()) || stringish(b->rhs.get())));
+        if (auto* c = dynamic_cast<CallExpr*>(e)) {
+            static const std::set<string> S = {"str","upper","lower","join","replace","substr","readfile"};
+            return S.count(c->name) > 0;
+        }
+        return false;
+    }
+
+    // 컴파일 시점에 값이 정해지는 정수인가. -1 은 NegExpr(NumExpr) 로 파싱되므로 같이 본다.
+    static bool constInt(Expr* e, double& out) {
+        if (auto* n = dynamic_cast<NumExpr*>(e)) {
+            if (n->v != (long long)n->v) return false;
+            out = n->v; return true;
+        }
+        if (auto* g = dynamic_cast<NegExpr*>(e)) {
+            double v;
+            if (!constInt(g->inner.get(), v)) return false;
+            out = -v; return true;
+        }
+        return false;
+    }
+
+    // print 에 그대로 넘겨도 Venos 와 같게 찍히는 식인가.
+    // 아니면 _show() 로 감싼다 (딕셔너리 따옴표, 참/거짓, 5.0 표기 때문).
+    bool plainSafe(Expr* e) {
+        if (stringish(e)) return true;
+        double k;
+        if (constInt(e, k)) return true;
+        if (auto* v = dynamic_cast<VarExpr*>(e)) return intVars.count(v->name) > 0;
+        if (auto* c = dynamic_cast<CallExpr*>(e)) return c->name == "len" && !funcs.count("len");
+        // 정수끼리의 + - * % 는 파이썬에서도 정수라 그대로 찍어도 된다 (/ 는 소수가 되므로 제외)
+        if (auto* b = dynamic_cast<BinExpr*>(e)) {
+            if (b->interpN > 0) return true;
+            switch (b->op) {
+                case Tok::PLUS: case Tok::MINUS: case Tok::STAR: case Tok::PERCENT:
+                    return plainSafe(b->lhs.get()) && plainSafe(b->rhs.get())
+                        && !stringish(b->lhs.get()) && !stringish(b->rhs.get());
+                default: return false;
+            }
+        }
+        return false;
+    }
+    // 본문이 이미 return 으로 끝나면 뒤에 return 0 을 붙이지 않는다
+    static bool endsWithReturn(Stmt* s) {
+        if (!s) return false;
+        if (dynamic_cast<ReturnStmt*>(s)) return true;
+        if (auto* b = dynamic_cast<BlockStmt*>(s))
+            return !b->stmts.empty() && endsWithReturn(b->stmts.back().get());
+        if (auto* i = dynamic_cast<IfStmt*>(s))
+            return i->elseB && endsWithReturn(i->thenB.get()) && endsWithReturn(i->elseB.get());
+        return false;
+    }
+
+    // 보간 체인 "이름: {x}" → f"이름: {x}" 로 되돌린다.
+    // 파서가 ("" + "이름: ") + x 로 풀어놨고 루트에 조각 수가 남아 있다.
+    string fstring(BinExpr* root) {
+        std::vector<Expr*> parts;
+        Expr* cur = root;
+        for (int k = 0; k < root->interpN; k++) {
+            auto* b = static_cast<BinExpr*>(cur);
+            parts.push_back(b->rhs.get());
+            cur = b->lhs.get();
+        }
+        std::reverse(parts.begin(), parts.end());
+        string o = "f\"";
+        for (Expr* p : parts) {
+            if (auto* s = dynamic_cast<StrExpr*>(p)) {
+                for (char c : s->s) {
+                    if (c == '{')       o += "{{";
+                    else if (c == '}')  o += "}}";
+                    else if (c == '"')  o += "\\\"";
+                    else if (c == '\\') o += "\\\\";
+                    else if (c == '\n') o += "\\n";
+                    else if (c == '\t') o += "\\t";
+                    else                o += c;
+                }
+            } else {
+                o += "{" + expr(p) + "}";
+            }
+        }
+        return o + "\"";
+    }
+
+    // ---- 표현식 ----
+    string expr(Expr* e) {
+        if (auto* n = dynamic_cast<NumExpr*>(e)) {
+            if (n->v != (long long)n->v) sawFloat = true;
+            return pyNum(n->v);
+        }
+        if (auto* s = dynamic_cast<StrExpr*>(e))  return pyStr(s->s);
+        if (auto* v = dynamic_cast<VarExpr*>(e))  return pyName(v->name);
+        if (auto* l = dynamic_cast<ListExpr*>(e)) {
+            sawList = true;
+            string o = "[";
+            for (size_t i = 0; i < l->items.size(); i++) {
+                if (i) o += ", ";
+                o += expr(l->items[i].get());
+            }
+            return o + "]";
+        }
+        if (auto* m = dynamic_cast<MapExpr*>(e)) {
+            sawMap = true;
+            string o = "{";
+            for (size_t i = 0; i < m->items.size(); i++) {
+                if (i) o += ", ";
+                o += expr(m->items[i].first.get()) + ": " + expr(m->items[i].second.get());
+            }
+            return o + "}";
+        }
+        if (auto* ix = dynamic_cast<IndexExpr*>(e))
+            return indexGet(ix->target.get(), ix->index.get());
+        if (auto* f = dynamic_cast<FieldExpr*>(e))
+            return wrap(f->target.get(), P_ATOM) + "." + pyName(f->field);
+        if (auto* mc = dynamic_cast<MethodCallExpr*>(e)) {
+            string o = wrap(mc->target.get(), P_ATOM) + "." + pyName(mc->method) + "(";
+            for (size_t i = 0; i < mc->args.size(); i++) {
+                if (i) o += ", ";
+                o += expr(mc->args[i].get());
+            }
+            return o + ")";
+        }
+        if (auto* b = dynamic_cast<BinExpr*>(e)) {
+            if (b->interpN > 0) return fstring(b);
+            int p = precOf(b);
+            string L = wrap(b->lhs.get(), p), R = wrap(b->rhs.get(), p + 1);
+            // Venos 는 "나이: " + 15 를 알아서 이어붙인다. 파이썬은 아니므로 str() 을 씌운다.
+            if (b->op == Tok::PLUS && (stringish(b->lhs.get()) || stringish(b->rhs.get()))) {
+                if (!stringish(b->lhs.get())) L = need("show") + "(" + expr(b->lhs.get()) + ")";
+                if (!stringish(b->rhs.get())) R = need("show") + "(" + expr(b->rhs.get()) + ")";
+            }
+            const char* op = "+";
+            switch (b->op) {
+                case Tok::PLUS: op = "+";  break;
+                case Tok::MINUS:op = "-";  break;
+                case Tok::STAR: op = "*";  break;
+                case Tok::SLASH:op = "/";  sawFloat = true; break;
+                case Tok::PERCENT: op = "%"; sawMod = true; break;
+                case Tok::EQ:   op = "=="; break;
+                case Tok::NEQ:  op = "!="; break;
+                case Tok::LT:   op = "<";  break;
+                case Tok::GT:   op = ">";  break;
+                case Tok::LE:   op = "<="; break;
+                case Tok::GE:   op = ">="; break;
+                default: throw nope(b->line, "지원하지 않는 연산자");
+            }
+            return L + " " + op + " " + R;
+        }
+        if (auto* n = dynamic_cast<NegExpr*>(e))  return "-" + wrap(n->inner.get(), P_UNARY);
+        // Venos 의 not/and/or 는 1/0 을 낸다 — 파이썬 bool 이 그대로 찍히지 않도록 int() 로 맞춘다
+        if (auto* n = dynamic_cast<NotExpr*>(e))  return "int(not " + wrap(n->inner.get(), P_NOT + 1) + ")";
+        if (auto* lg = dynamic_cast<LogicalExpr*>(e)) {
+            int p = (lg->op == Tok::AND) ? P_AND : P_OR;   // 내부 자식용 (밖에서는 원자)
+            string op = (lg->op == Tok::AND) ? " and " : " or ";
+            return "int(bool(" + wrap(lg->lhs.get(), p) + ")" + op
+                 + "bool(" + wrap(lg->rhs.get(), p + 1) + "))";
+        }
+        if (auto* in = dynamic_cast<InputExpr*>(e)) {
+            sawFloat = true;   // 사용자가 1.5 를 칠 수도 있다
+            return need("input") + "(" + (in->prompt.empty() ? "" : pyStr(in->prompt)) + ")";
+        }
+        if (auto* c = dynamic_cast<CallExpr*>(e)) return call(c);
+        throw LangError("파이썬으로 변환할 수 없는 식이 있습니다");
+    }
+
+    // xs[1] 은 첫 번째, d["키"] 는 키 조회 — 리터럴이면 그 자리에서 정하고,
+    // 변수라서 알 수 없으면 도우미로 넘긴다.
+    string indexGet(Expr* target, Expr* index) {
+        sawIndex = true;
+        string T = wrap(target, P_ATOM);
+        if (dynamic_cast<StrExpr*>(index)) return T + "[" + expr(index) + "]";
+        if (auto* n = dynamic_cast<NumExpr*>(index)) return T + "[" + pyNum(n->v - 1) + "]";
+        if (!sawMap) return T + "[" + wrap(index, P_MUL) + " - 1]";   // 딕셔너리가 없으면 리스트뿐
+        return need("idx") + "(" + expr(target) + ", " + expr(index) + ")";
+    }
+
+    string call(CallExpr* c) {
+        auto A = [&](size_t i) { return expr(c->args[i].get()); };
+        // .메서드() 를 붙일 인자는 원자로 만들어야 한다.
+        // upper(a + b) → (a + b).upper()  (괄호가 없으면 b.upper() 가 되어 조용히 틀린다)
+        auto atom = [&](size_t i) { return wrap(c->args[i].get(), P_ATOM); };
+        size_t n = c->args.size();
+        const string& f = c->name;
+        auto argsJoined = [&]() {
+            string o;
+            for (size_t i = 0; i < n; i++) { if (i) o += ", "; o += A(i); }
+            return o;
+        };
+        // 사용자 함수 / 클래스 생성자
+        if (funcs.count(f) || classes.count(f)) return pyName(f) + "(" + argsJoined() + ")";
+
+        auto need2 = [&](size_t want) {
+            if (n != want)
+                throw err(c->line, f + "() 는 인자 " + std::to_string(want)
+                                     + "개가 필요합니다 (지금 " + std::to_string(n) + "개)");
+        };
+        if (f == "len")   { need2(1); return "len(" + A(0) + ")"; }
+        if (f == "abs")   { need2(1); return "abs(" + A(0) + ")"; }
+        if (f == "min")   { need2(2); return "min(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "max")   { need2(2); return "max(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "floor") { need2(1); imports.insert("math"); return "math.floor(" + A(0) + ")"; }
+        if (f == "ceil")  { need2(1); imports.insert("math"); return "math.ceil("  + A(0) + ")"; }
+        if (f == "sqrt")  { need2(1); imports.insert("math"); sawFloat = true; return "math.sqrt("  + A(0) + ")"; }
+        if (f == "round") { need2(1); imports.insert("math"); return need("round") + "(" + A(0) + ")"; }
+        if (f == "random"){ need2(2); imports.insert("random"); return need("random") + "(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "time")  { need2(0); imports.insert("time"); sawFloat = true; return "time.time()"; }
+        if (f == "num")   { need2(1); sawFloat = true; return need("num")  + "(" + A(0) + ")"; }
+        if (f == "str")   { need2(1); return need("show") + "(" + A(0) + ")"; }
+        if (f == "push")  { need2(2); sawList = true; return need("push") + "(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "pop")   { need2(1); return atom(0) + ".pop()"; }
+        if (f == "sort")  { need2(1); sawList = true; return need("sort") + "(" + A(0) + ")"; }
+        if (f == "keys")  { need2(1); sawMap = true; sawList = true; return "sorted(" + atom(0) + ".keys())"; }
+        if (f == "has")   { need2(2); sawMap = true;
+                            return "int(" + wrap(c->args[1].get(), P_CMP + 1) + " in "
+                                          + wrap(c->args[0].get(), P_CMP + 1) + ")"; }
+        if (f == "remove"){ need2(2); return need("remove") + "(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "split") { need2(2); sawList = true; return atom(0) + ".split(" + A(1) + ")"; }
+        if (f == "join")  { need2(2); return need("join") + "(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "upper") { need2(1); return atom(0) + ".upper()"; }
+        if (f == "lower") { need2(1); return atom(0) + ".lower()"; }
+        // find 는 + 1 이 붙으므로 통째로 괄호를 씌운다 (find(s,x) * 10 이 s.find(x) + 1 * 10 이 되면 안 된다)
+        if (f == "find")  { need2(2); return "(" + atom(0) + ".find(" + A(1) + ") + 1)"; }
+        if (f == "replace"){need2(3); return atom(0) + ".replace(" + A(1) + ", " + A(2) + ")"; }
+        if (f == "substr"){ need2(3); return need("substr") + "(" + A(0) + ", " + A(1) + ", " + A(2) + ")"; }
+        if (f == "readfile")  { need2(1); return need("readfile")   + "(" + A(0) + ")"; }
+        if (f == "writefile") { need2(2); return need("writefile")  + "(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "appendfile"){ need2(2); return need("appendfile") + "(" + A(0) + ", " + A(1) + ")"; }
+        if (f == "exists"){ need2(1); imports.insert("os"); return "int(os.path.exists(" + A(0) + "))"; }
+        if (f == "exit")  { need2(0); imports.insert("sys"); return need("exit") + "()"; }
+        if (f == "error") { need2(1); return need("error") + "(" + A(0) + ")"; }
+        if (f == "copy")  { need2(1); imports.insert("copy"); return "copy.deepcopy(" + A(0) + ")"; }
+        throw err(c->line, "정의되지 않은 함수: " + f);
+    }
+
+    // ---- 문장 ----
+    static string pad(int d) { return string(d * 4, ' '); }
+
+    // 대입 대상이 전역이면 함수 안에서 global 선언이 필요하다
+    void noteAssign(const string& name) {
+        if (inFunc && !localSet.count(name) && globalSet.count(name)) touchedGlobals.insert(name);
+        // for 루프 변수에 다시 대입하면 더 이상 정수라고 볼 수 없다
+        intVars.erase(name);
+    }
+
+    // 경로 대입의 앞부분: xs[1][2] / obj.필드 를 파이썬 좌변으로
+    string lvalue(const string& name, const std::vector<Accessor>& path) {
+        string cur = pyName(name);
+        for (auto& a : path) {
+            if (a.isField) { cur += "." + pyName(a.field); continue; }
+            Expr* ix = a.index.get();
+            if (dynamic_cast<StrExpr*>(ix))            cur += "[" + expr(ix) + "]";
+            else if (auto* nn = dynamic_cast<NumExpr*>(ix)) cur += "[" + pyNum(nn->v - 1) + "]";
+            else if (!sawMap)                          cur += "[" + wrap(ix, P_MUL) + " - 1]";
+            else                                       cur += "[" + need("k") + "(" + cur + ", " + expr(ix) + ")]";
+        }
+        return cur;
+    }
+
+    void stmt(Stmt* s, std::ostringstream& o, int d) {
+        if (auto* l = dynamic_cast<LetStmt*>(s)) {
+            if (inFunc) localSet.insert(l->name);
+            intVars.erase(l->name);
+            o << pad(d) << pyName(l->name) << " = " << expr(l->val.get()) << "\n";
+            return;
+        }
+        if (auto* a = dynamic_cast<AssignStmt*>(s)) {
+            noteAssign(a->name);
+            // 파서가 x += 1 을 x = x + 1 로 풀어놓는다 — 읽기 좋게 되돌린다
+            if (auto* b = dynamic_cast<BinExpr*>(a->val.get())) {
+                auto* lv = dynamic_cast<VarExpr*>(b->lhs.get());
+                const char* cop = nullptr;
+                if (b->interpN == 0 && lv && lv->name == a->name) {
+                    switch (b->op) {
+                        case Tok::PLUS:  cop = "+="; break;
+                        case Tok::MINUS: cop = "-="; break;
+                        case Tok::STAR:  cop = "*="; break;
+                        case Tok::SLASH: cop = "/="; break;
+                        default: break;
+                    }
+                }
+                if (cop) {
+                    o << pad(d) << pyName(a->name) << " " << cop << " "
+                      << wrap(b->rhs.get(), P_ADD + 1) << "\n";
+                    return;
+                }
+            }
+            o << pad(d) << pyName(a->name) << " = " << expr(a->val.get()) << "\n";
+            return;
+        }
+        if (auto* pa = dynamic_cast<PathAssignStmt*>(s)) {
+            noteAssign(pa->name);
+            o << pad(d) << lvalue(pa->name, pa->path) << " = " << expr(pa->val.get()) << "\n";
+            return;
+        }
+        if (auto* pc = dynamic_cast<PathCompoundStmt*>(s)) {
+            noteAssign(pc->name);
+            string slot = lvalue(pc->name, pc->path);
+            const char* op = "+";
+            switch (pc->op) {
+                case Tok::PLUS: op = "+="; break;
+                case Tok::MINUS:op = "-="; break;
+                case Tok::STAR: op = "*="; break;
+                case Tok::SLASH:op = "/="; break;
+                default: throw nope(pc->line, "복합 대입 연산자");
+            }
+            o << pad(d) << slot << " " << op << " " << expr(pc->rhs.get()) << "\n";
+            return;
+        }
+        if (auto* p = dynamic_cast<PrintStmt*>(s)) {
+
+            o << pad(d) << "print(";
+            for (size_t i = 0; i < p->vals.size(); i++) {
+                if (i) o << ", ";
+                Expr* v = p->vals[i].get();
+                // Venos 와 똑같이 찍히는 게 확실하면 그대로, 아니면 _show() 로 맞춘다
+                o << (plainSafe(v) ? expr(v) : need("show") + "(" + expr(v) + ")");
+            }
+            o << ")\n";
+            return;
+        }
+        if (auto* es = dynamic_cast<ExprStmt*>(s)) {
+            o << pad(d) << expr(es->e.get()) << "\n";
+            return;
+        }
+        if (auto* b = dynamic_cast<BlockStmt*>(s)) {
+            for (auto& c : b->stmts) stmt(c.get(), o, d);
+            return;
+        }
+        if (auto* i = dynamic_cast<IfStmt*>(s)) {
+            o << pad(d) << "if " << expr(i->cond.get()) << ":\n";
+            body(i->thenB.get(), o, d + 1);
+            Stmt* els = i->elseB.get();
+            while (els) {
+                if (auto* chain = dynamic_cast<IfStmt*>(els)) {   // else if → elif
+                    o << pad(d) << "elif " << expr(chain->cond.get()) << ":\n";
+                    body(chain->thenB.get(), o, d + 1);
+                    els = chain->elseB.get();
+                } else {
+                    o << pad(d) << "else:\n";
+                    body(els, o, d + 1);
+                    els = nullptr;
+                }
+            }
+            return;
+        }
+        if (auto* t = dynamic_cast<TryStmt*>(s)) {
+            o << pad(d) << "try:\n";
+            body(t->tryB.get(), o, d + 1);
+            o << pad(d) << "except Exception as _e:\n";
+            if (inFunc) localSet.insert(t->var);
+            o << pad(d + 1) << pyName(t->var) << " = str(_e)\n";
+            body(t->catchB.get(), o, d + 1);
+            return;
+        }
+        if (auto* w = dynamic_cast<WhileStmt*>(s)) {
+            o << pad(d) << "while " << expr(w->cond.get()) << ":\n";
+            body(w->body.get(), o, d + 1);
+            return;
+        }
+        if (auto* f = dynamic_cast<ForStmt*>(s)) {
+            if (inFunc) localSet.insert(f->var);
+            o << pad(d) << "for " << pyName(f->var) << " in " << rangeOf(f) << ":\n";
+            bool had = intVars.count(f->var) > 0;
+            // 진짜 range() 를 쓸 때만 정수다. step 0.5 처럼 소수가 섞이면 _rng 가 소수를 내준다.
+            bool isInt = lastRangeIsInt;
+            if (isInt) intVars.insert(f->var);
+            body(f->body.get(), o, d + 1);
+            if (!had) intVars.erase(f->var);
+            return;
+        }
+        if (auto* fe = dynamic_cast<ForEachStmt*>(s)) {
+            if (inFunc) localSet.insert(fe->var);
+            Expr* it = fe->iter.get();
+            // 리터럴이면 그대로 돈다. 변수면 딕셔너리일 수 있어 도우미를 거친다
+            // (Venos 는 딕셔너리를 키 정렬 순서로 순회한다).
+            string src = (!sawMap || dynamic_cast<ListExpr*>(it) || dynamic_cast<StrExpr*>(it))
+                       ? expr(it) : need("iter") + "(" + expr(it) + ")";
+            o << pad(d) << "for " << pyName(fe->var) << " in " << src << ":\n";
+            body(fe->body.get(), o, d + 1);
+            return;
+        }
+        if (dynamic_cast<BreakStmt*>(s))    { o << pad(d) << "break\n";    return; }
+        if (dynamic_cast<ContinueStmt*>(s)) { o << pad(d) << "continue\n"; return; }
+        if (auto* r = dynamic_cast<ReturnStmt*>(s)) {
+            o << pad(d) << "return " << (r->val ? expr(r->val.get()) : "0") << "\n";
+            return;
+        }
+        if (dynamic_cast<FuncStmt*>(s))  return;   // 최상위로 끌어올려 따로 낸다
+        if (dynamic_cast<ClassStmt*>(s)) return;
+        throw LangError("파이썬으로 변환할 수 없는 문장이 있습니다");
+    }
+
+    // for i = a to b step s  →  range. Venos 는 양끝을 포함하므로 끝값을 한 칸 민다.
+    string rangeOf(ForStmt* f) {
+        string a = expr(f->start.get()), b = expr(f->end.get());
+        double sa, sb, st;
+        bool ka = constInt(f->start.get(), sa), kb = constInt(f->end.get(), sb);
+        lastRangeIsInt = true;
+        if (!f->step) {
+            if (ka && kb)                       // 둘 다 상수면 방향이 확정된다
+                return sa <= sb ? "range(" + a + ", " + pyNum(sb + 1) + ")"
+                                : "range(" + a + ", " + pyNum(sb - 1) + ", -1)";
+            lastRangeIsInt = false;             // _rng 는 소수도 내줄 수 있다
+            return need("rng") + "(" + a + ", " + b + ")";
+        }
+        if (kb && constInt(f->step.get(), st) && st != 0)
+            return "range(" + a + ", " + pyNum(sb + (st > 0 ? 1 : -1)) + ", " + pyNum(st) + ")";
+        lastRangeIsInt = false;
+        return need("rng") + "(" + a + ", " + b + ", " + expr(f->step.get()) + ")";
+    }
+
+    // 빈 블록은 파이썬에서 pass 가 필요하다
+    void body(Stmt* s, std::ostringstream& o, int d) {
+        std::ostringstream tmp;
+        stmt(s, tmp, d);
+        if (tmp.str().empty()) o << pad(d) << "pass\n";
+        else                   o << tmp.str();
+    }
+
+    // ---- 함수/클래스 수집 (중첩 func 도 최상위로) ----
+    void collect(Stmt* s) {
+        if (auto* c = dynamic_cast<ClassStmt*>(s)) {
+            classes[c->name] = c;
+            for (auto& m : c->methodList) collect(m->body.get());
+            return;
+        }
+        if (auto* f = dynamic_cast<FuncStmt*>(s)) { funcs[f->name] = f; collect(f->body.get()); return; }
+        if (auto* b = dynamic_cast<BlockStmt*>(s)) { for (auto& c : b->stmts) collect(c.get()); return; }
+        if (auto* i = dynamic_cast<IfStmt*>(s)) {
+            collect(i->thenB.get());
+            if (i->elseB) collect(i->elseB.get());
+            return;
+        }
+        if (auto* w = dynamic_cast<WhileStmt*>(s))     { collect(w->body.get()); return; }
+        if (auto* f = dynamic_cast<ForStmt*>(s))       { collect(f->body.get()); return; }
+        if (auto* fe = dynamic_cast<ForEachStmt*>(s))  { collect(fe->body.get()); return; }
+        if (auto* t = dynamic_cast<TryStmt*>(s))       { collect(t->tryB.get()); collect(t->catchB.get()); return; }
+    }
+    void collectVars(Stmt* s, std::set<string>& out) {
+        if (auto* l = dynamic_cast<LetStmt*>(s))   { out.insert(l->name); return; }
+        if (auto* f = dynamic_cast<ForStmt*>(s))   { out.insert(f->var); collectVars(f->body.get(), out); return; }
+        if (auto* fe = dynamic_cast<ForEachStmt*>(s)) { out.insert(fe->var); collectVars(fe->body.get(), out); return; }
+        if (auto* b = dynamic_cast<BlockStmt*>(s)) { for (auto& c : b->stmts) collectVars(c.get(), out); return; }
+        if (auto* i = dynamic_cast<IfStmt*>(s)) {
+            collectVars(i->thenB.get(), out);
+            if (i->elseB) collectVars(i->elseB.get(), out);
+            return;
+        }
+        if (auto* w = dynamic_cast<WhileStmt*>(s)) { collectVars(w->body.get(), out); return; }
+        if (auto* t = dynamic_cast<TryStmt*>(s)) {
+            out.insert(t->var);
+            collectVars(t->tryB.get(), out);
+            collectVars(t->catchB.get(), out);
+            return;
+        }
+    }
+
+    string defOf(FuncStmt* fn, const string& name, bool method, int d, bool ctor = false) {
+        inFunc = true;
+        localSet.clear();
+        touchedGlobals.clear();
+        if (method) localSet.insert("self");
+        for (auto& p : fn->params) localSet.insert(p);
+        collectVars(fn->body.get(), localSet);
+
+        std::ostringstream fb;
+        stmt(fn->body.get(), fb, d + 1);
+
+        std::ostringstream o;
+        o << pad(d) << "def " << name << "(";
+        bool first = true;
+        if (method) { o << "self"; first = false; }
+        for (auto& p : fn->params) { if (!first) o << ", "; first = false; o << pyName(p); }
+        o << "):\n";
+        if (!touchedGlobals.empty()) {
+            o << pad(d + 1) << "global ";
+            bool f1 = true;
+            for (auto& g : touchedGlobals) { if (!f1) o << ", "; f1 = false; o << pyName(g); }
+            o << "\n";
+        }
+        o << (fb.str().empty() ? pad(d + 1) + "pass\n" : fb.str());
+        // 파이썬 __init__ 은 값을 돌려주면 TypeError 다. 그 밖에는 Venos 처럼 기본 0 을 돌려준다.
+        if (!ctor && !endsWithReturn(fn->body.get())) o << pad(d + 1) << "return 0\n";
+        inFunc = false;
+        localSet.clear();
+        touchedGlobals.clear();
+        return o.str();
+    }
+
+    string generate(std::vector<StmtP>& program) {
+        for (auto& s : program) collect(s.get());
+        for (auto& s : program) collectVars(s.get(), globalSet);
+
+        // 본문을 두 번 만든다. 1차는 딕셔너리가 등장하는지(sawMap)와 필요한 도우미를 알아내는 용도 —
+        // 딕셔너리가 아예 없는 프로그램이면 _idx/_iter 같은 도우미 없이 훨씬 읽기 좋은 코드가 나온다.
+        std::ostringstream defs, main;
+        auto buildAll = [&](std::ostringstream& defsOut, std::ostringstream& mainOut) {
+            for (auto& [cname, cls] : classes) {
+                defsOut << "class " << pyName(cname) << ":\n";
+                for (auto& m : cls->methodList)
+                    defsOut << defOf(m.get(), m->name == "init" ? "__init__" : pyName(m->name),
+                                     true, 1, m->name == "init") << "\n";
+                // Venos 는 객체를 내용으로 보여주고 내용으로 비교한다 — 파이썬 기본 동작과 달라 맞춰 준다
+                defsOut << pad(1) << "def __str__(self):\n"
+                        << pad(2) << "return " << need("show") << "(self)\n\n"
+                        << pad(1) << "def __eq__(self, other):\n"
+                        << pad(2) << "return type(self) is type(other) and self.__dict__ == other.__dict__\n\n";
+            }
+            for (auto& [name, fn] : funcs) defsOut << defOf(fn, pyName(name), false, 0) << "\n";
+            for (auto& st : program) stmt(st.get(), mainOut, 0);
+        };
+        {
+            std::ostringstream d0, m0;
+            buildAll(d0, m0);          // 1차: 버리는 통과
+        }
+        helpers.clear();
+        imports.clear();
+        buildAll(defs, main);
+
+        std::ostringstream out;
+        out << "# 이 파일은 Venos 프로그램을 파이썬으로 옮긴 것입니다 (venos topython).\n";
+        int noteN = 0;
+        if (sawIndex || sawFloat || sawMod || !helpers.empty())
+            out << "#\n# Venos 와 파이썬이 다른 점 — 숨기지 않고 적어 둡니다:\n";
+        if (sawIndex)
+            out << "#   " << ++noteN << ") 리스트를 Venos 는 1번부터, 파이썬은 0번부터 셉니다."
+                   " 그래서 xs[1] 이 xs[0] 이 됩니다.\n";
+        if (sawFloat)
+            out << "#   " << ++noteN << ") 소수를 보여주는 방식이 다릅니다. Venos 는 5.0 을 5 로,"
+                   " 91.66666...을 91.6667 로\n"
+                   "#      줄여서 보여주지만 파이썬은 있는 그대로 보여줍니다.\n";
+        if (sawMod)
+            out << "#   " << ++noteN << ") 음수 나머지가 다릅니다 — Venos 는 -7 % 3 이 -1,"
+                   " 파이썬은 2 입니다.\n";
+        if (!helpers.empty())
+            out << "#   " << ++noteN << ") 밑줄로 시작하는 _이름 함수들은 Venos 와 똑같이 보이게 하려고"
+                   " 붙인 것뿐이니\n"
+                   "#      파이썬을 배울 때는 신경 쓰지 않아도 됩니다.\n";
+        if (!imports.empty()) {
+            out << "\n";
+            for (auto& m : imports) out << "import " << m << "\n";
+        }
+        string help = helperSource();
+        if (!help.empty()) out << "\n" << help;
+        out << "\n";
+        if (!defs.str().empty()) out << defs.str();
+        out << main.str();
+        return out.str();
+    }
+
+    // 실제로 쓴 도우미만 낸다 — 안 쓰면 한 줄도 안 붙는다
+    string helperSource() {
+        // _show 는 이 프로그램에 실제로 나올 수 있는 값 종류만 다루도록 조립한다.
+        // 리스트도 딕셔너리도 클래스도 없는 프로그램이면 네 줄로 끝난다.
+        string show = "def _show(v):\n"
+                      "    if isinstance(v, str): return v\n"
+                      "    if isinstance(v, bool): return \"1\" if v else \"0\"\n";
+        if (sawList)
+            show += "    if isinstance(v, list): return \"[\" + \", \".join(_q(x) for x in v) + \"]\"\n";
+        if (sawMap)
+            show += "    if isinstance(v, dict): return \"{\" + \", \".join('\"%s\": %s' % (k, _q(v[k])) for k in sorted(v)) + \"}\"\n";
+        if (!classes.empty())
+            show += "    if hasattr(v, \"__dict__\"):\n"
+                    "        d = v.__dict__\n"
+                    "        return type(v).__name__ + \"{\" + \", \".join('\"%s\": %s' % (k, _q(d[k])) for k in sorted(d)) + \"}\"\n";
+        show += "    if isinstance(v, float):\n"
+                "        return str(int(v)) if abs(v) < 9e18 and v == int(v) else \"%g\" % v\n"
+                "    return str(v)\n";
+        if (sawList || sawMap || !classes.empty())
+            show += "def _q(v):\n"
+                    "    return '\"' + v + '\"' if isinstance(v, str) else _show(v)\n";
+
+        std::map<string, const char*> SRC = {
+            {"num",
+             "def _num(s):\n"
+             "    if isinstance(s, (int, float)): return s\n"
+             "    f = float(str(s).strip())\n"
+             "    return int(f) if f == int(f) else f\n"},
+            {"input",
+             "def _input(prompt=\"\"):\n"
+             "    s = input(prompt).strip()\n"
+             "    try:\n"
+             "        f = float(s)\n"
+             "        return int(f) if f == int(f) else f\n"
+             "    except ValueError:\n"
+             "        return s\n"},
+            {"idx",
+             "def _idx(c, k):\n"
+             "    return c[k] if isinstance(c, dict) else c[int(k) - 1]\n"},
+            {"k",
+             "def _k(c, i):\n"
+             "    return i if isinstance(c, dict) else int(i) - 1\n"},
+            {"push",  "def _push(xs, v):\n    xs.append(v)\n    return xs\n"},
+            {"sort",  "def _sort(xs):\n    xs.sort()\n    return xs\n"},
+            {"join",  "def _join(xs, sep):\n    return sep.join(_show(x) for x in xs)\n"},
+            {"substr","def _substr(s, start, n):\n    i = int(start) - 1\n    return s[i:i + int(n)]\n"},
+            {"remove",
+             "def _remove(c, k):\n"
+             "    if isinstance(c, dict):\n"
+             "        return int(c.pop(k, None) is not None)\n"
+             "    return c.pop(int(k) - 1)\n"},
+            {"round", "def _round(x):\n    return math.floor(x + 0.5) if x >= 0 else math.ceil(x - 0.5)\n"},
+            {"random","def _random(a, b):\n    a, b = int(a), int(b)\n    if a > b: a, b = b, a\n    return random.randint(a, b)\n"},
+            {"rng",
+             "def _rng(a, b, s=1):\n"
+             "    if a == int(a) and b == int(b) and s == int(s):\n"
+             "        a, b, s = int(a), int(b), int(s)\n"
+             "        return range(a, b + (1 if s > 0 else -1), s)\n"
+             "    out, x = [], a\n"
+             "    while (x <= b) if s > 0 else (x >= b):\n"
+             "        out.append(x)\n"
+             "        x += s\n"
+             "    return out\n"},
+            {"iter",  "def _iter(v):\n    return sorted(v) if isinstance(v, dict) else v\n"},
+            {"error", "def _error(m):\n    raise Exception(m)\n"},
+            {"exit",  "def _exit():\n    sys.exit(0)\n"},
+            {"readfile",
+             "def _readfile(p):\n    with open(p, encoding=\"utf-8\") as f:\n        return f.read()\n"},
+            {"writefile",
+             "def _writefile(p, s):\n"
+             "    with open(p, \"w\", encoding=\"utf-8\") as f:\n        f.write(_show(s))\n    return 1\n"},
+            {"appendfile",
+             "def _appendfile(p, s):\n"
+             "    with open(p, \"a\", encoding=\"utf-8\") as f:\n        f.write(_show(s))\n    return 1\n"},
+        };
+        // _q 는 _show 안에서만 쓰이고, join/writefile 등도 _show 에 기댄다
+        std::set<string> want = helpers;
+        if (want.count("join") || want.count("writefile") || want.count("appendfile")) want.insert("show");
+        string o;
+        for (auto& h : want) {
+            if (h == "show") { o += show; continue; }
+            auto it = SRC.find(h);
+            if (it != SRC.end()) o += it->second;
+        }
+        return o;
+    }
+};
+
 // build 명령: .my → .cpp 변환 후 g++ 로 컴파일
 static string currentFile;   // 현재 choose 된 파일 (셸 전역)
 
@@ -3143,6 +3883,32 @@ void cmdBuild(const string& arg) {
     }
 }
 
+// topython 명령: .my → 읽을 수 있는 .py
+// build 와 달리 컴파일하지 않는다 — 학생이 읽고 다음 언어로 넘어가라고 내주는 파일이다.
+void cmdTopython() {
+    if (currentFile.empty()) { std::cout << "choose 로 파일을 먼저 선택하세요\n"; return; }
+    string fname = currentFile;
+    string pyName = fname.substr(0, fname.size() - FILE_EXT.size()) + ".py";
+
+    string pyCode;
+    try {
+        auto tokens = lex(expandImports(fname));
+        Parser parser(std::move(tokens));
+        auto program = parser.parseProgram();
+        PyGen gen;
+        pyCode = gen.generate(program);
+    } catch (const LangError& e) {
+        printError(e.what(), "!! python conversion failed: ");
+        return;
+    }
+    {
+        std::ofstream out(toPath(pyName));
+        out << pyCode;
+    }
+    std::cout << "Python generated: " << pyName << "  (run: python3 " << pyName << ")\n";
+}
+
+
 // import 문 존재 검사 — 웹/REPL 은 파일 병합(expandImports)을 거치지 않아
 // 그대로 파싱하면 엉뚱한 문법 에러가 나므로, 미리 잡아 친절하게 알려준다
 static bool containsImport(const string& src) {
@@ -3183,6 +3949,36 @@ extern "C" EMSCRIPTEN_KEEPALIVE void venos_run(const char* code) {
         std::cout << "=== done ===\n";
     } catch (const LangError& e) {
         printError(e.what());
+    } catch (const std::exception& e) {
+        std::cout << "!! 내부 에러: " << e.what() << "\n";
+    }
+    std::cout << std::flush;
+}
+
+// 플레이그라운드의 "Python 으로 보기" — 변환한 파이썬 소스를 그대로 출력으로 흘려보낸다.
+// (venos_run 과 같은 경로라 웹 쪽에 새 배관이 필요 없다.)
+extern "C" EMSCRIPTEN_KEEPALIVE void venos_topython(const char* code) {
+    string src(code);
+    g_lineMap.clear();
+    g_srcLines.clear();
+    string cur;
+    for (char c : src) {
+        if (c == '\n') { g_srcLines.push_back(cur); cur.clear(); }
+        else cur += c;
+    }
+    if (containsImport(src)) {
+        std::cout << "!! 에러: 웹 플레이그라운드에서는 import 를 지원하지 않습니다 (데스크톱 전용)\n";
+        std::cout << std::flush;
+        return;
+    }
+    try {
+        auto tokens = lex(src);
+        Parser parser(std::move(tokens));
+        auto program = parser.parseProgram();
+        PyGen gen;
+        std::cout << gen.generate(program);
+    } catch (const LangError& e) {
+        printError(e.what(), "!! python conversion failed: ");
     } catch (const std::exception& e) {
         std::cout << "!! 내부 에러: " << e.what() << "\n";
     }
@@ -3480,6 +4276,7 @@ void cmdHelp() {
         "  run           실행 (인터프리터)\n"
         "  build         진짜 실행 파일로 컴파일 (.my → .cpp → exe)\n"
         "  build run     컴파일 후 바로 실행\n"
+        "  topython      같은 프로그램의 파이썬 버전을 만든다 (.my → .py)\n"
         "  list          파일 목록\n"
         "  repl          한 줄씩 즉시 실행 모드\n"
         "  clear         화면 지우기\n"
@@ -3524,6 +4321,13 @@ int main(int argc, char** argv) {
     //   venos build 파일.my run  빌드 후 실행
     if (argc >= 2) {
         string a1 = argv[1];
+        if (a1 == "topython" && argc >= 3) {
+            string f = withExt(argv[2]);
+            if (!fs::exists(toPath(f))) { std::cout << "파일 없음: " << f << "\n"; return 1; }
+            currentFile = f;
+            cmdTopython();
+            return 0;
+        }
         if (a1 == "build" && argc >= 3) {
             string f = withExt(argv[2]);
             if (!fs::exists(toPath(f))) { std::cout << "파일 없음: " << f << "\n"; return 1; }
@@ -3558,6 +4362,7 @@ int main(int argc, char** argv) {
         else if (cmd == "run")     cmdRun();
         else if (cmd == "list")    cmdList();
         else if (cmd == "build")   cmdBuild(arg);
+        else if (cmd == "topython") cmdTopython();
         else if (cmd == "repl")    cmdRepl();
         else if (cmd == "clear")   { clearScreen(); drawBanner(); }
         else if (cmd == "help")    cmdHelp();

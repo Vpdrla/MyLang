@@ -10,6 +10,7 @@ Source files use the `.my` extension, encoded in UTF-8.
 venos program.my           # run directly (interpreter)
 venos build program.my     # transpile to C++, compile with g++ → native executable
 venos build program.my run # build, then run immediately
+venos topython program.my  # write the same program as Python (.my → .py)
 venos                      # interactive shell (create/choose/code/run/build/...)
 ```
 Inside the shell, `repl` starts a line-by-line REPL — type a bare expression to see its value.

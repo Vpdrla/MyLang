@@ -9,8 +9,16 @@
 
 ![Demo: playing and building the example RPG](docs/demo.gif)
 
-A pseudocode-style programming language designed to be readable by non-programmers.
-Implemented in a single C++ file (~3,400 lines) with a **dual backend: a tree-walking interpreter and a C++ transpiler** that produces standalone native executables.
+**Executable pseudocode.** Venos is written the way algorithms are written on a whiteboard or in a
+textbook — `if x >= 90 then`, `for i = 1 to 10`, `while x > 0 do` — except you can actually run it.
+
+It is a bridge, not a destination. Beginners get stuck crossing from block coding (Scratch, Entry) to
+a real text language: unfamiliar syntax, English-only names, error messages they cannot read. Venos
+removes those three obstacles without hiding how programming actually works — and then hands you
+over: **`venos topython` rewrites any Venos program as readable Python.**
+
+Implemented in a single C++ file (~4,400 lines) with three backends: a tree-walking interpreter, a
+C++ transpiler that produces standalone native executables, and a Python emitter.
 
 ```
 func fib(n) {
@@ -44,12 +52,38 @@ class 사람 {
 ## Features
 
 - **Readable syntax** — `if x > 5 then { }`, `for i = 1 to 10`, `while x > 0 do { }`; optional filler keywords (`then`, `do`) make code read like pseudocode
-- **Two ways to run** — an interpreter for instant feedback, and a transpiler (`.my` → C++ → native executable via g++). Both backends are differential-tested to produce identical output for the same program
-- **A complete language** — functions (recursion, hoisting), classes (constructors, methods, `self`), lists and dictionaries (reference semantics, deep equality with `==`, `+` to join lists, `copy()` for deep copies), string interpolation (`"name: {x}"`), UTF-8-aware string handling, `try/catch`, `import`, file I/O, and 30+ built-in functions
+- **Three ways to run** — an interpreter for instant feedback, a transpiler (`.my` → C++ → native executable via g++), and a Python emitter (`.my` → `.py`). All three are differential-tested to produce identical output for the same program
+- **A way out** — `venos topython` writes your program as idiomatic Python, so nothing you learn here is thrown away
+- **Enough language to write real programs** — functions (recursion, hoisting), classes (constructors, methods, `self`), lists and dictionaries (reference semantics, deep equality with `==`, `+` to join lists, `copy()` for deep copies), string interpolation (`"name: {x}"`), UTF-8-aware string handling, `try/catch`, `import`, file I/O, and 30+ built-in functions
 - **Helpful errors** — error messages with line numbers; with `import`, errors point to the original file (`[utils.my line 3]`). Undefined variables and wrong argument counts are caught at build time
 - **Built-in dev environment** — a CLI shell with file management, an editor (arrow-key scroll viewer, paste mode), and one-command run/build
 
 > Note: error messages and shell UI are currently in Korean.
+
+## From Venos to Python
+
+Venos does not want to be your last language. `venos topython` writes the same program as Python you
+can read, keeping your variable and function names — Python 3 accepts Korean identifiers, so they
+survive the trip:
+
+```
+func 최댓값(점수들) {                        │  def 최댓값(점수들):
+    let 최대 = 점수들[1]                     │      최대 = 점수들[0]
+    for 점수 in 점수들 {                     │      for 점수 in 점수들:
+        if 점수 > 최대 then { 최대 = 점수 }  │          if 점수 > 최대:
+    }                                        │              최대 = 점수
+    return 최대                              │      return 최대
+}                                            │
+                                             │
+let 우리반 = [88, 94, 71]                    │  우리반 = [88, 94, 71]
+print "가장 높은 점수: {최댓값(우리반)}"      │  print(f"가장 높은 점수: {최댓값(우리반)}")
+```
+
+Both print `가장 높은 점수: 94`. String interpolation becomes an f-string; `then` and the braces
+disappear; 1-based indexing is shifted to 0-based and the generated file says so in a header comment,
+because that difference is worth learning rather than hiding.
+
+In the playground the same thing is one click: **🐍 Python**.
 
 ## Playground
 
@@ -62,6 +96,7 @@ It is built to be usable in a classroom where nothing can be installed:
 - **🔗 Share** turns your program into a link, so a teacher can hand out a starting point and a student can hand back a result
 - **Your work is saved automatically** — closing the tab does not lose it
 - **📚 Lessons** walks a beginner through the language step by step, and every lesson has its own link (`#lesson=lists`)
+- **🐍 Python** shows the same program in Python and copies it, so a lesson can end in a real Python file
 
 ## Learning Venos
 
@@ -97,6 +132,7 @@ No dependencies. Requires C++17 (C++20 compatible), and builds clean with GCC, C
 ./venos program.my           # run a file directly (interpreter)
 ./venos build program.my     # compile to a native executable (needs g++ installed)
 ./venos build program.my run # compile and run immediately
+./venos topython program.my  # write the same program as Python (program.py)
 ```
 
 The interpreter is self-contained; only `build` shells out to `g++`.
@@ -132,6 +168,10 @@ Everything — lexer, parser, AST, interpreter, transpiler, runtime library, and
 
 ## Why
 
+**Where Venos belongs, and what it refuses to become: [STRATEGY.md](STRATEGY.md)**
+([한국어](STRATEGY.ko.md)) — what other teaching languages got right and wrong, and the
+gap this one is aimed at.
+
 I built this from scratch to understand how programming languages actually work.
 It started as v0.1 (an interpreter that could only do variables and `print`) and grew to v0.6
 by writing real programs in it, finding what was missing, and adding it — the text RPG in
@@ -140,8 +180,8 @@ by writing real programs in it, finding what was missing, and adding it — the 
 ## Testing
 
 Every language feature is verified by **differential testing**: each program in `tests/cases/`
-runs on both backends (the interpreter and the transpiled native binary) and the outputs must match.
-CI does this on every push:
+runs on all three backends (the interpreter, the transpiled native binary, and the Python emitted by
+`topython`) and the outputs must match. CI does this on every push:
 
 ```bash
 tests/run_tests.sh

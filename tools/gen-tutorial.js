@@ -25,7 +25,9 @@ const T = {
     nextBody:
       '- 전체 문법은 [언어 명세](VENOS_SPEC.md)에서 볼 수 있습니다.\n' +
       '- 더 큰 예제: [`examples/rpg.my`](examples/rpg.my) — 지금까지 배운 것만으로 만든 226줄짜리 텍스트 RPG입니다.\n' +
-      '- 만든 프로그램은 플레이그라운드의 **🔗 Share** 버튼으로 링크를 만들어 친구나 선생님에게 보낼 수 있습니다.',
+      '- 만든 프로그램은 플레이그라운드의 **🔗 Share** 버튼으로 링크를 만들어 친구나 선생님에게 보낼 수 있습니다.\n' +
+      '- **다음 언어로 넘어갈 때**: 플레이그라운드의 **🐍 Python** 버튼(또는 `venos topython 파일.my`)을 누르면 '
+      + '지금 짠 프로그램이 파이썬으로 어떻게 생겼는지 그대로 보여줍니다. 변수·함수 이름도 그대로 남습니다.',
     genNote: '<!-- 이 파일은 docs/lessons.js 에서 자동 생성됩니다. 직접 고치지 말고 `node tools/gen-tutorial.js` 를 쓰세요. -->'
   },
   en: {
@@ -43,7 +45,9 @@ const T = {
     nextBody:
       '- The full syntax lives in the [language spec](VENOS_SPEC.en.md).\n' +
       '- A bigger example: [`examples/rpg.en.my`](examples/rpg.en.my) — a 227-line text RPG built from what you just learned.\n' +
-      '- Use the **🔗 Share** button in the playground to turn your program into a link you can send to a friend or teacher.',
+      '- Use the **🔗 Share** button in the playground to turn your program into a link you can send to a friend or teacher.\n' +
+      '- **When you are ready for the next language**: the **🐍 Python** button (or `venos topython program.my`) '
+      + 'rewrites what you just wrote as Python, keeping your own variable and function names.',
     genNote: '<!-- Generated from docs/lessons.js. Do not edit by hand — run `node tools/gen-tutorial.js`. -->'
   }
 };

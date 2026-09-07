@@ -17,5 +17,5 @@ jobs:
       - name: Syntax check (C++20)
         run: g++ -std=c++20 -O2 -fsyntax-only venos.cpp
 
-      - name: Differential tests (interpreter vs transpiled binary)
+      - name: Differential tests (interpreter vs transpiled binary vs emitted Python)
         run: tests/run_tests.sh
