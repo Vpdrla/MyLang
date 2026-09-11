@@ -572,7 +572,7 @@ function showLesson(i, opts) {
   if (i < 0 || i >= LESSONS.length) return;
   const l = LESSONS[i];
   if (opts.code === undefined) {          // 이어하기가 아니면 시작 코드로
-    if (!askThenSet(l.code)) return;
+    if (!askThenSet(l.code[lessonLang] || l.code.ko)) return;
   } else {
     setCode(opts.code, false);            // 저장해둔 진행 중인 작업 복원 → 보호 대상
   }
@@ -613,7 +613,9 @@ $('lessonLang').onclick = () => {
   LESSONS.forEach((l, i) => {
     $('lessons').options[i + 1].textContent = `${i + 1}. ${l.title[lessonLang] || l.title.en}`;
   });
-  if (currentLesson >= 0) showLesson(currentLesson, { code: editor.value });
+  // 아직 손대지 않은 시작 코드면 언어에 맞춰 같이 바꾼다.
+  // 고치던 중이면 그대로 둔다 — 언어 버튼이 남의 작업을 지우면 안 된다.
+  if (currentLesson >= 0) showLesson(currentLesson, isDirty() ? { code: editor.value } : undefined);
   store.write();
 };
 

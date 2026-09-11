@@ -50,8 +50,7 @@ Create a variable with `let`. **Names can be written in Korean** (or any languag
 
 Once created, assign to it without `let`, and use `+=` to add to it.
 
-Try changing `나이` (age) and running it again.
-이름 means 'name', and 미르 is a name.
+`이름` means "name" and `나이` means "age" — the identifiers stay Korean here on purpose. Try changing `나이` and running it again.
 
 ```
 let 이름 = "미르"
@@ -61,7 +60,7 @@ print 이름
 print 나이
 
 나이 += 1          # age + 1
-print "내년 나이:", 나이
+print "next year:", 나이
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=variables)**
@@ -101,10 +100,10 @@ let score = 85
 
 if score >= 90 then {
     print "grade A"
-} else if 점수 >= 80 {
+} else if score >= 80 {
     print "grade B"
 } else {
-    print "Better Next Time!"
+    print "Better next time!"
 }
 
 print "The score is {score}"
@@ -133,7 +132,7 @@ print ""
 for i = 5 to 1 step -1 {
     print i
 }
-print "end!"
+print "Liftoff!"
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=for)**
@@ -146,7 +145,7 @@ print "end!"
 
 `break` leaves the loop immediately. Make sure the condition eventually becomes false, or the loop never ends.
 
-Change `money left` and see how many you can buy.
+Change `moneyleft` and see how many you can buy.
 
 ```
 let moneyleft = 50
@@ -158,7 +157,7 @@ while moneyleft >= price do {
     count += 1
 }
 
-print "I bought {count} and I got {price} dollars left."
+print "Bought {count}, with {moneyleft} dollars left."
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=while)**
@@ -174,15 +173,15 @@ A list holds values in order. **Indices start at 1**, not 0!
 Try adding more fruit to the list.
 
 ```
-let fruit = ["사과", "바나나", "포도"]
+let fruit = ["apple", "banana", "grape"]
 
-print "첫 번째:", 과일[1]      # 1번부터!
-print "개수:", len(과일)
+print "first:", fruit[1]      # counting starts at 1!
+print "count:", len(fruit)
 
-push(과일, "딸기")
+push(fruit, "strawberry")
 
-for 하나 in 과일 {
-    print "-", 하나
+for one in fruit {
+    print "-", one
 }
 ```
 
@@ -199,19 +198,19 @@ Reading a missing key is an error, so get into the habit of checking with `has` 
 Try adding more subjects and scores.
 
 ```
-let 성적 = {"수학": 90, "영어": 85}
+let scores = {"math": 90, "english": 85}
 
-성적["과학"] = 95        # 새 키는 넣으면 생김
-성적["수학"] += 5
+scores["science"] = 95        # assigning a new key creates it
+scores["math"] += 5
 
-for 과목 in 성적 {
-    print "{과목} → {성적[과목]}점"
+for subject in scores {
+    print "{subject} -> {scores[subject]}"
 }
 
-if has(성적, "체육") {
-    print "체육:", 성적["체육"]
+if has(scores, "music") {
+    print "music:", scores["music"]
 } else {
-    print "체육 점수는 아직 없어요."
+    print "No music score yet."
 }
 ```
 
@@ -223,23 +222,23 @@ if has(성적, "체육") {
 
 Give a piece of behavior a name with `func` and reuse it as often as you like; `return` hands a result back.
 
-A function can even **call itself** (recursion) — `팩토리얼` (factorial) below does exactly that.
+A function can even **call itself** (recursion) — `factorial` below does exactly that.
 
-Try adding one more `인사("...")` line.
+Try adding one more `greet("...")` line.
 
 ```
-func 인사(이름) {
-    print "안녕하세요, {이름}님!"
+func greet(name) {
+    print "Hello, {name}!"
 }
 
-func 팩토리얼(n) {
+func factorial(n) {
     if n <= 1 then { return 1 }
-    return n * 팩토리얼(n - 1)
+    return n * factorial(n - 1)
 }
 
-인사("미르")
-인사("하늘")
-print "5! =", 팩토리얼(5)
+greet("Mir")
+greet("Sky")
+print "5! =", factorial(5)
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=functions)**
@@ -250,26 +249,26 @@ print "5! =", 팩토리얼(5)
 
 A class bundles **data and behavior** together. `init` is the constructor, called automatically when you create one.
 
-`self` means "this object" — use `self.이름` to read and write its own fields.
+`self` means "this object" — use `self.name` to read and write its own fields.
 
 Try creating one more dog.
 
 ```
-class 강아지 {
-    func init(이름) {
-        self.이름 = 이름
-        self.나이 = 0
+class Dog {
+    func init(name) {
+        self.name = name
+        self.age = 0
     }
-    func 짖기() { print "{self.이름}: 멍멍!" }
-    func 생일() {
-        self.나이 += 1
-        print "{self.이름}(은)는 이제 {self.나이}살"
+    func bark() { print "{self.name}: woof!" }
+    func birthday() {
+        self.age += 1
+        print "{self.name} is now {self.age}"
     }
 }
 
-let 뭉치 = 강아지("뭉치")
-뭉치.짖기()
-뭉치.생일()
+let buddy = Dog("Buddy")
+buddy.bark()
+buddy.birthday()
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=classes)**
@@ -285,16 +284,16 @@ The message lands in the variable you name after `catch`, as a string. You can r
 Try changing the divisor to something other than 0.
 
 ```
-let 나누는수 = 0
+let divisor = 0
 
 try {
-    print 10 / 나누는수
-    print "이 줄은 실행되지 않아요"
-} catch 오류 {
-    print "문제가 생겼어요:", 오류
+    print 10 / divisor
+    print "this line never runs"
+} catch err {
+    print "Something went wrong:", err
 }
 
-print "그래도 프로그램은 계속됩니다."
+print "The program keeps going."
 ```
 
 ▶ **[Open in the playground](https://vpdrla.github.io/Venos/#lesson=errors)**
@@ -310,20 +309,20 @@ This uses everything so far — variables, `while`, `if`, `input`, functions, an
 Widen the range, add a limit on tries, or make the hints friendlier. When it works, send it to a friend with the **Share** button!
 
 ```
-let 정답 = random(1, 50)
-let 시도 = 0
+let answer = random(1, 50)
+let tries = 0
 
-print "1부터 50 사이 숫자를 맞혀보세요!"
+print "Guess a number between 1 and 50!"
 
 while true {
-    let 답 = input "숫자: "
-    시도 += 1
+    let guess = input "number: "
+    tries += 1
 
-    if 답 == 정답 {
-        print "정답! {시도}번 만에 맞혔어요 🎉"
+    if guess == answer {
+        print "Correct! You got it in {tries} tries"
         break
-    } else if 답 < 정답 { print "더 큰 수예요 ↑" }
-    else { print "더 작은 수예요 ↓" }
+    } else if guess < answer { print "Higher" }
+    else { print "Lower" }
 }
 ```
 
