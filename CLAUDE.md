@@ -35,7 +35,7 @@ g++ -std=c++20 -O2 -fsyntax-only venos.cpp
 # WASM (플레이그라운드 갱신 시) — emcc 가 아니라 **em++** 로 부를 것.
 # 요즘 emsdk(6.0.8 확인)는 emcc 로 C++ 를 링크하면 operator delete 미정의로 죽는다.
 em++ -O2 -std=c++17 -fexceptions -DVENOS_WASM venos.cpp -o docs/venos.js \
-  -s EXPORTED_FUNCTIONS=_venos_run,_venos_topython,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
+  -s EXPORTED_FUNCTIONS=_venos_run,_venos_topython,_venos_flush,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
   -s DISABLE_EXCEPTION_CATCHING=0 -s ALLOW_MEMORY_GROWTH=1 \
   -s TOTAL_STACK=33554432 -s INITIAL_MEMORY=67108864 \
   -s MODULARIZE=1 -s EXPORT_NAME=createVenos -s ENVIRONMENT=web
@@ -76,6 +76,9 @@ git tag v0.6.0 && git push origin v0.6.0
 - windows.h가 `IN`/`OUT`을 빈 매크로로 정의 → enum은 `Tok::INKW`, include 뒤 `#undef IN/OUT` + `#ifndef NOMINMAX` 가드 유지 (본체와 RUNTIME 문자열 양쪽).
 - Windows 콘솔 한글: 셸은 ReadConsoleW, **생성 exe의 RUNTIME에도 동일 로직(rt_readline) 이식돼 있음** — input 관련 수정 시 양쪽 유지.
 - Emscripten은 기본으로 C++ 예외 catch 비활성 → WASM 빌드에 `-fexceptions -s DISABLE_EXCEPTION_CATCHING=0` 필수 (없으면 return/break가 전부 죽음).
+- **EM_JS 안에서 힙 문자열을 읽을 때 `UTF8ToString(p)` 을 그냥 쓰지 말 것.** emscripten 은 16바이트가 넘는 문자열만 `TextDecoder.decode(HEAPU8.subarray(...))` 로 푸는데, 최신 Chrome 이 성장 가능한 wasm 힙을 **resizable ArrayBuffer** 로 주면 TextDecoder 가 거부한다 (`must not be resizable`). 긴 `input` 프롬프트가 전부 이걸로 죽었다 — 짧은 건 수동 루프로 가서 멀쩡해 더 헷갈린다. **`HEAPU8.slice(p, end)` 사본을 디코드할 것** (`js_prompt_raw` 참고). `-sTEXTDECODER=0` 은 이 emscripten 에서 지원 중단(`#error`)이라 빌드 플래그로는 못 피한다.
+- input 프롬프트는 개행이 없는 부분 줄이라 emscripten stdout 버퍼에 남는다. 실행이 도중에 죽으면 **다음 실행 첫 줄에 붙어 나온다** → 플레이그라운드가 새 실행 전에 `venos_flush()` 로 비운다.
+- 플레이그라운드/WASM 을 건드렸으면 **`node tools/playground-check.js --future`** 로 확인할 것. `--future` 는 위 resizable 조건을 흉내 내 재현한다 (지금 브라우저로는 그 조건을 만들 수 없다). CI 에는 없다.
 - 화면 클리어는 `\033[2J\033[3J\033[H` (3J = 스크롤백까지).
 - u8string은 C++17/20 타입이 달라서 바이트 복사로 처리 중.
 

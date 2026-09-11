@@ -47,7 +47,14 @@
 #ifdef VENOS_WASM
 // 브라우저의 prompt() 다이얼로그로 입력 받기
 EM_JS(char*, js_prompt_raw, (const char* p), {
-    var msg = UTF8ToString(p);
+    // UTF8ToString(p) 를 그냥 쓰면 안 된다. emscripten 은 16바이트가 넘는 문자열만
+    // TextDecoder.decode(HEAPU8.subarray(...)) 로 처리하는데, 최신 Chrome 은 성장 가능한
+    // wasm 힙을 resizable ArrayBuffer 로 주고 TextDecoder 는 그런 버퍼를 거부한다
+    // ("The provided ArrayBuffer value must not be resizable"). 긴 프롬프트가 전부 여기서 죽었다.
+    // slice() 는 항상 새 비-resizable 버퍼를 만드므로, 사본을 떠서 읽으면 어느 브라우저에서도 안전하다.
+    var end = p;
+    while (HEAPU8[end]) ++end;
+    var msg = new TextDecoder().decode(HEAPU8.slice(p, end));
     var r = prompt(msg.length ? msg : "input:");
     if (r === null) r = "";
     var len = lengthBytesUTF8(r) + 1;
@@ -3983,6 +3990,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE void venos_topython(const char* code) {
         std::cout << "!! 내부 에러: " << e.what() << "\n";
     }
     std::cout << std::flush;
+}
+// input 프롬프트는 개행이 없는 "부분 줄"이라 emscripten 의 stdout 버퍼에 남아 있다가
+// 다음 개행에 딸려 나온다. 정상 흐름에선 readLine 이 입력값을 되찍으며 바로 해소되지만,
+// 그 전에 예외가 튀면 찌꺼기가 남아 **다음 실행의 첫 줄에 붙는다**.
+// 플레이그라운드가 새 실행을 시작하기 전에 이걸 불러 버퍼를 비운다.
+extern "C" EMSCRIPTEN_KEEPALIVE void venos_flush() {
+    std::cout << "\n" << std::flush;
 }
 #else   // ---- 이하 네이티브 전용 (CLI 셸) ----
 
