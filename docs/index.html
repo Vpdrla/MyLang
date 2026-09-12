@@ -64,6 +64,17 @@
     font-family: "Cascadia Code", Consolas, "D2Coding", monospace;
     font-size: 14px; line-height: 1.55; background: var(--panel);
   }
+  #inputLine {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-top: 1px solid var(--line); background: var(--panel);
+    font-family: "Cascadia Code", Consolas, "D2Coding", monospace; font-size: 14px;
+  }
+  #inputPrompt { color: var(--accent2); white-space: pre-wrap; }
+  #inputBox {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: inherit; font: inherit; padding: 2px 0;
+  }
+  #inputLine .hint { font-size: 11px; opacity: .55; }
   #output .err { color: var(--err); }
   #output .ok { color: var(--accent2); }
   #clearBtn { font-size: 11px; padding: 2px 10px; }
@@ -153,7 +164,12 @@
       <span>output</span>
       <button id="clearBtn">clear</button>
     </div>
-    <div id="output"><span class="hint">loading Venos… (~471KB)</span></div>
+    <div id="output"><span class="hint">loading Venos… (~839KB)</span></div>
+    <div id="inputLine" hidden>
+      <span id="inputPrompt"></span>
+      <input id="inputBox" type="text" autocomplete="off" spellcheck="false">
+      <span class="hint">Enter</span>
+    </div>
   </div>
 </main>
 
@@ -708,7 +724,31 @@ boot();
 let M = null;
 // Python 변환 결과를 그대로 복사할 수 있게 출력을 모아 둔다
 let capture = null;
+
+// 실행 중 input 요청 — 브라우저 알림창 대신 출력창 아래 입력줄로 받는다.
+// ASYNCIFY 로 빌드했기 때문에 여기서 기다리는 동안 브라우저가 화면을 그린다.
+// 예전엔 실행이 통째로 동기라, 출력이 DOM 에만 들어가고 칠해지지 않은 채 알림창이 떠서
+// 학생이 "무엇을 묻는 건지" 볼 수가 없었다.
+let pendingInput = null;
+function askInput(promptText) {
+  return new Promise(resolve => {
+    inputPrompt.textContent = promptText;
+    inputLine.hidden = false;
+    inputBox.value = '';
+    inputBox.focus();
+    output.scrollTop = output.scrollHeight;
+    pendingInput = value => { pendingInput = null; inputLine.hidden = true; resolve(value); };
+  });
+}
+function endInput() { pendingInput = null; inputLine.hidden = true; }
+inputBox.addEventListener('keydown', e => {
+  if (!pendingInput) return;
+  if (e.key === 'Enter')       { e.preventDefault(); pendingInput(inputBox.value); }
+  else if (e.key === 'Escape') { e.preventDefault(); pendingInput(''); }
+});
+
 createVenos({
+  venosAskInput: askInput,
   print: t => { if (capture !== null) capture.push(t);
                 append(t, t.startsWith('!!') ? 'err' : (t.startsWith('===') ? 'ok' : '')); },
   printErr: t => append(t, 'err'),
@@ -733,20 +773,22 @@ function drainStale() {
   try { M.ccall('venos_flush', null, [], []); } catch (e) {}
 }
 
-function run() {
+async function run() {
   if (!M || runBtn.disabled) return;
   runBtn.disabled = true;
+  pyBtn.disabled = true;
   drainStale();
   output.textContent = '';
-  // 렌더링 한 프레임 양보 후 동기 실행 (실행 중엔 탭이 잠시 멈출 수 있음)
-  setTimeout(() => {
-    try {
-      M.ccall('venos_run', null, ['string'], [editor.value]);
-    } catch (e) {
-      append('!! runtime error: ' + e, 'err');
-    }
-    runBtn.disabled = false;
-  }, 30);
+  await new Promise(r => setTimeout(r, 0));   // 지운 화면을 먼저 그리게 한 프레임 양보
+  try {
+    // async: true — venos_run 은 input 에서 멈췄다 이어질 수 있다 (ASYNCIFY)
+    await M.ccall('venos_run', null, ['string'], [editor.value], { async: true });
+  } catch (e) {
+    append('!! runtime error: ' + e, 'err');
+  }
+  endInput();
+  runBtn.disabled = false;
+  pyBtn.disabled = false;
 }
 runBtn.onclick = run;
 

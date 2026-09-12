@@ -46,7 +46,10 @@
 
 #ifdef VENOS_WASM
 // 브라우저의 prompt() 다이얼로그로 입력 받기
-EM_JS(char*, js_prompt_raw, (const char* p), {
+// ASYNCIFY 로 빌드하므로 여기서 await 할 수 있다 — 그래야 입력을 기다리는 동안
+// 브라우저가 화면을 그린다. 예전엔 동기 실행이라 출력이 DOM 에만 들어가고 칠해지지 않은 채
+// prompt() 가 떠서, 학생이 "무슨 질문인지" 볼 수가 없었다.
+EM_ASYNC_JS(char*, js_prompt_raw, (const char* p), {
     // UTF8ToString(p) 를 그냥 쓰면 안 된다. emscripten 은 16바이트가 넘는 문자열만
     // TextDecoder.decode(HEAPU8.subarray(...)) 로 처리하는데, 최신 Chrome 은 성장 가능한
     // wasm 힙을 resizable ArrayBuffer 로 주고 TextDecoder 는 그런 버퍼를 거부한다
@@ -55,8 +58,11 @@ EM_JS(char*, js_prompt_raw, (const char* p), {
     var end = p;
     while (HEAPU8[end]) ++end;
     var msg = new TextDecoder().decode(HEAPU8.slice(p, end));
-    var r = prompt(msg.length ? msg : "input:");
-    if (r === null) r = "";
+    // 페이지가 입력줄을 제공하면 그걸 쓰고, 없으면(다른 데 끼워 쓸 때) 예전처럼 prompt()
+    var ask = Module.venosAskInput
+           || function (m) { return Promise.resolve(prompt(m.length ? m : "input:")); };
+    var r = await ask(msg);
+    if (r === null || r === undefined) r = "";
     var len = lengthBytesUTF8(r) + 1;
     var buf = _malloc(len);
     stringToUTF8(r, buf, len);
