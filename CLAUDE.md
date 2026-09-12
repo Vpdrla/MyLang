@@ -38,8 +38,10 @@ em++ -O2 -std=c++17 -fexceptions -DVENOS_WASM venos.cpp -o docs/venos.js \
   -s EXPORTED_FUNCTIONS=_venos_run,_venos_topython,_venos_flush,_malloc,_free -s EXPORTED_RUNTIME_METHODS=ccall \
   -s DISABLE_EXCEPTION_CATCHING=0 -s ALLOW_MEMORY_GROWTH=1 \
   -s TOTAL_STACK=33554432 -s INITIAL_MEMORY=67108864 \
-  -s MODULARIZE=1 -s EXPORT_NAME=createVenos -s ENVIRONMENT=web
+  -s MODULARIZE=1 -s EXPORT_NAME=createVenos -s ENVIRONMENT=web \
+  -s ASYNCIFY -s ASYNCIFY_STACK_SIZE=1048576
 ```
+`ASYNCIFY` 는 빼면 안 된다 — `input` 이 이것 없이는 페이지를 통째로 얼린다 (아래 지뢰밭).
 
 ## 철칙: 백엔드 동시 구현 + diff 검증
 언어 기능을 추가/수정하면 **반드시 인터프리터와 트랜스파일러(RUNTIME 문자열 + CodeGen) 양쪽에 구현**하고, 같은 프로그램을 두 방식으로 실행해 출력을 diff로 비교한다 (differential testing — 지금까지 코드젠 버그를 여러 개 잡아준 핵심 검증법). **`PyGen`(topython)도 같이 갱신**한다 — 못 옮기는 문법이면 틀린 파이썬을 내지 말고 줄 번호와 함께 거절할 것.
@@ -78,6 +80,7 @@ git tag v0.6.0 && git push origin v0.6.0
 - Emscripten은 기본으로 C++ 예외 catch 비활성 → WASM 빌드에 `-fexceptions -s DISABLE_EXCEPTION_CATCHING=0` 필수 (없으면 return/break가 전부 죽음).
 - **EM_JS 안에서 힙 문자열을 읽을 때 `UTF8ToString(p)` 을 그냥 쓰지 말 것.** emscripten 은 16바이트가 넘는 문자열만 `TextDecoder.decode(HEAPU8.subarray(...))` 로 푸는데, 최신 Chrome 이 성장 가능한 wasm 힙을 **resizable ArrayBuffer** 로 주면 TextDecoder 가 거부한다 (`must not be resizable`). 긴 `input` 프롬프트가 전부 이걸로 죽었다 — 짧은 건 수동 루프로 가서 멀쩡해 더 헷갈린다. **`HEAPU8.slice(p, end)` 사본을 디코드할 것** (`js_prompt_raw` 참고). `-sTEXTDECODER=0` 은 이 emscripten 에서 지원 중단(`#error`)이라 빌드 플래그로는 못 피한다.
 - input 프롬프트는 개행이 없는 부분 줄이라 emscripten stdout 버퍼에 남는다. 실행이 도중에 죽으면 **다음 실행 첫 줄에 붙어 나온다** → 플레이그라운드가 새 실행 전에 `venos_flush()` 로 비운다.
+- **웹에서 `input` 은 반드시 비동기여야 한다.** 동기로 실행하면 `print` 한 글자가 DOM 에만 들어가고 **화면에 칠해지기 전에** 입력창이 떠서, 학생이 무엇을 묻는지 볼 수가 없다 (실제로 제보된 버그). 그래서 `js_prompt_raw` 는 `EM_ASYNC_JS` 이고 빌드에 `-s ASYNCIFY` 가 필요하며, 페이지는 `createVenos({ venosAskInput })` 로 Promise 를 돌려주는 입력 함수를 넘기고 `venos_run` 을 **`ccall(..., { async: true })`** 로 부른다. 셋 중 하나라도 빠지면 조용히 예전 동작으로 돌아간다. (`venosAskInput` 이 없으면 `window.prompt` 로 떨어지는 대비책은 남겨 뒀다.)
 - 플레이그라운드/WASM 을 건드렸으면 **`node tools/playground-check.js --future`** 로 확인할 것. `--future` 는 위 resizable 조건을 흉내 내 재현한다 (지금 브라우저로는 그 조건을 만들 수 없다). CI 에는 없다.
 - **`TUTORIAL.md`·`TUTORIAL.ko.md` 는 생성 파일이다 — 손으로 고치면 다음 `gen-tutorial.js` 실행 때 조용히 사라진다.** 실제로 한 번 그렇게 영어 번역본을 날렸다. 레슨 코드는 `docs/lessons.js` 의 `code.ko` / `code.en` 에 넣을 것. 레슨 2(variables)만 식별자를 한글로 남긴다 — 그 레슨의 주제가 "이름을 한국어로 지어도 된다"라서다.
 - `desc.en` 이 식별자를 이름으로 언급하면(`` `factorial` below ``, `` use `self.name` ``) 영어 코드와 **반드시 같이 고칠 것**. 안 맞으면 설명이 거짓말이 된다.
@@ -98,7 +101,7 @@ git tag v0.6.0 && git push origin v0.6.0
 - [ ] 개발기 블로그 초안 (소재: IN 매크로 사건, 세그폴트→128MB 스택, diff 테스팅, WASM -fexceptions)
 - [ ] 커뮤니티 공유: r/ProgrammingLanguages → Show HN → 국내 (플레이그라운드 완성 후)
 - [x] 릴리스 자동화 (`.github/workflows/release.yml`) — Linux/Windows/macOS 정적 바이너리 → GitHub Releases. **첫 릴리스 v0.6.0 게시됨** (https://github.com/Vpdrla/Venos/releases/tag/v0.6.0, 태그는 `1ca77d3`, 자산 4개, 전체 런 69초)
-- [ ] `input` 의 `window.prompt()` 모달 제거 (RPG가 수십 번 띄움 — Asyncify 또는 Worker 필요)
+- [x] `input` 의 `window.prompt()` 모달 제거 — **Asyncify** 로 해결. 출력창 아래 입력줄이 뜨고, 기다리는 동안 화면이 정상적으로 칠해진다. wasm 471KB → 839KB(1.78배), 브라우저 fib(24) 0.33초(네이티브 0.51초)라 속도는 문제 없음. (Worker+SharedArrayBuffer 는 GitHub Pages 가 COOP/COEP 헤더를 못 줘서 불가)
 - [ ] 에러 메시지에 오타 제안 ("정의되지 않은 변수: 이릅" → "혹시 '이름'?")
 - [ ] `docs/venos.js`·`venos.wasm` 을 CI에서 빌드 (현재 커밋된 수동 빌드본이라 소스와 어긋날 수 있음. 마지막 수동 빌드: emsdk 6.0.8, `em++`)
 - [ ] Windows 네이티브 CI 잡 — macOS 는 release.yml 에서 유니버설 빌드 + 스위트까지 돌지만, Windows exe 는 크로스 컴파일로 **빌드만** 되고 한 번도 실행되지 않는다 (ReadConsoleW·`IN`/`OUT` 매크로 회피·`_beginthreadex` 가 런타임 미검증). `windows-latest` 에서 스위트를 돌리려면 Git Bash·CRLF·콘솔 한글 인코딩부터 확인해야 함

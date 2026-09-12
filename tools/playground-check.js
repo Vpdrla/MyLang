@@ -52,13 +52,15 @@ function serve() {
   });
 }
 
-// 실제로 학생이 밟는 경로들. 프롬프트 길이가 16바이트를 넘는 것들이 위험 구간이다.
 const LESSONS = require(path.join(DOCS, 'lessons.js'));
 const lesson = (id, lang) => {
   const c = LESSONS.find(l => l.id === id).code;
   return c[lang || 'ko'] || c.ko;
 };
 
+// 실제로 학생이 밟는 경로들. 프롬프트 길이가 16바이트를 넘는 것들이 위험 구간이다.
+// paintedAtInput: 입력을 기다리는 그 순간 출력창에 이미 보여야 하는 글자
+//   (예전엔 실행이 동기라 화면이 안 칠해져서, 무엇을 묻는지 알 수가 없었다)
 const CHECKS = [
   { name: '짧은 프롬프트 (16바이트 이하)', code: 'let x = input "> "\nprint "got", x\n',
     answer: '미르', expect: 'got 미르' },
@@ -66,6 +68,9 @@ const CHECKS = [
     answer: 'Mir', expect: 'got Mir' },
   { name: '긴 프롬프트 (한글 21바이트)', code: 'let x = input "이름이 뭐예요? "\nprint "got", x\n',
     answer: '미르', expect: 'got 미르' },
+  { name: '입력 기다릴 때 이미 출력이 보임',
+    code: 'print "===== 던전 ====="\nprint "[1] 새 게임  [2] 불러오기"\nlet x = input "> "\nprint "골랐다:", x\n',
+    answer: '1', expect: '골랐다: 1', paintedAtInput: '[1] 새 게임' },
   { name: '레슨 3 (input)', code: lesson('input'), answer: '미르', expect: '미르님' },
   { name: '긴 출력 · 보간', code: 'let a = "열여섯 바이트를 훌쩍 넘는 아주 긴 한글 문자열입니다"\nprint "값: {a}"\n',
     expect: '값: 열여섯' },
@@ -96,9 +101,7 @@ const CHECKS = [
   const jsErrors = [];
   page.on('pageerror', e => jsErrors.push(String(e.message)));
   page.on('console', m => { if (m.type() === 'error') jsErrors.push(m.text()); });
-
-  let pending = null;
-  page.on('dialog', async d => { await d.accept(pending ?? ''); });
+  page.on('dialog', async d => { await d.accept(); });   // askThenSet 의 confirm()
 
   await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#runBtn:not([disabled])', { timeout: 60000 });
@@ -106,41 +109,62 @@ const CHECKS = [
   console.log(`플레이그라운드 확인${FUTURE ? '  [--future: 미래 Chrome 흉내]' : ''}\n`);
   let bad = 0;
 
-  const runAndRead = async (sel) => {
+  // 실행이 끝날 때까지 돌면서, 입력줄이 뜨면 답을 넣어 준다.
+  // 입력을 기다리는 순간의 출력 내용도 같이 돌려준다 (화면이 칠해졌는지 확인용).
+  const runAndRead = async (sel, answer) => {
+    let atInput = null;
     await page.click(sel);
-    await page.waitForFunction(() => {
-      const t = document.querySelector('#output').textContent;
-      return t.includes('=== done ===') || t.includes('!!') || t.includes('print(');
-    }, { timeout: 30000 }).catch(() => {});
-    return (await page.$eval('#output', e => e.textContent)).trim();
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      const st = await page.evaluate(() => ({
+        out: document.querySelector('#output').textContent,
+        waiting: !document.querySelector('#inputLine').hidden,
+        running: document.querySelector('#runBtn').disabled,
+      }));
+      if (st.waiting) {
+        if (atInput === null) atInput = st.out;
+        await page.fill('#inputBox', answer ?? '');
+        await page.press('#inputBox', 'Enter');
+      } else if (!st.running &&
+                 (st.out.includes('=== done ===') || st.out.includes('!!') || st.out.includes('print('))) {
+        break;
+      }
+      await page.waitForTimeout(80);
+    }
+    return { out: (await page.$eval('#output', e => e.textContent)).trim(), atInput };
   };
 
   for (const c of CHECKS) {
-    pending = c.answer ?? '';
     await page.fill('#editor', c.code);
-    const out = await runAndRead('#runBtn');
-    const ok = out.includes(c.expect) && !out.includes('!!');
-    if (!ok) { bad++; console.log(`✗ ${c.name}`); console.log('   ' + out.split('\n').join('\n   ')); }
-    else console.log(`✓ ${c.name}`);
+    const { out, atInput } = await runAndRead('#runBtn', c.answer);
+    let ok = out.includes(c.expect) && !out.includes('!!');
+    if (ok && c.paintedAtInput && !(atInput || '').includes(c.paintedAtInput)) {
+      ok = false;
+      console.log(`✗ ${c.name}  — 입력을 기다리는데 출력이 화면에 없음`);
+      console.log('   입력 시점 출력: ' + JSON.stringify(atInput));
+    } else if (!ok) {
+      console.log(`✗ ${c.name}`);
+      console.log('   ' + out.split('\n').join('\n   '));
+    }
+    if (ok) console.log(`✓ ${c.name}`); else bad++;
   }
 
-  // 🐍 Python 버튼도 같은 조건에서 도는지
+  // 🐍 Python 버튼
   await page.fill('#editor', 'let 이름 = "미르"\nprint "안녕, {이름}! 반가워요 정말로"\n');
-  const py = await runAndRead('#pyBtn');
+  const py = (await runAndRead('#pyBtn')).out;
   if (py.includes('print(f"') && !py.includes('!!')) console.log('✓ 🐍 Python 버튼');
   else { bad++; console.log('✗ 🐍 Python 버튼'); console.log('   ' + py.split('\n').join('\n   ')); }
 
   // 앞 실행이 죽어도 다음 실행 첫 줄이 깨끗한가 (개행 없는 프롬프트 찌꺼기)
   await page.fill('#editor', 'let x = input "이름이 뭐예요? "\nprint x\n');
-  await runAndRead('#runBtn');
+  await runAndRead('#runBtn', '미르');
   await page.fill('#editor', 'print "첫 줄"\n');
-  const after = await runAndRead('#runBtn');
+  const after = (await runAndRead('#runBtn')).out;
   if (after.split('\n')[0].trim() === '첫 줄') console.log('✓ 이전 실행 찌꺼기 없음');
   else { bad++; console.log('✗ 이전 실행 찌꺼기가 첫 줄에 붙음'); console.log('   ' + after.split('\n')[0]); }
 
   // 레슨 언어 토글이 코드까지 바꾸는가 (손대지 않은 시작 코드일 때만)
   const lists = LESSONS.find(l => l.id === 'lists').code;
-  // 해시만 바꾸면 문서가 다시 로드되지 않아 boot() 가 안 돈다 → 쿼리를 붙여 새로 연다
   await page.goto(`http://127.0.0.1:${PORT}/?lessoncheck=1#lesson=lists`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => document.querySelector('#editor').value.includes('push('), { timeout: 20000 });
   const before = await page.$eval('#editor', e => e.value);
