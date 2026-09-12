@@ -68,7 +68,7 @@ function build(lang) {
     out.push('---', '');
     out.push(`## ${i + 1}. ${title}`, '');
     out.push(l.desc[lang] || l.desc.en, '');
-    out.push('```', l.code, '```', '');
+    out.push('```', l.code[lang] || l.code.ko, '```', '');
     out.push(`${t.openIn}(${PLAY}#lesson=${l.id})**`, '');
   });
 

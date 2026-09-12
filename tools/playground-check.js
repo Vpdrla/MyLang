@@ -54,7 +54,10 @@ function serve() {
 
 // 실제로 학생이 밟는 경로들. 프롬프트 길이가 16바이트를 넘는 것들이 위험 구간이다.
 const LESSONS = require(path.join(DOCS, 'lessons.js'));
-const lesson = id => LESSONS.find(l => l.id === id).code;
+const lesson = (id, lang) => {
+  const c = LESSONS.find(l => l.id === id).code;
+  return c[lang || 'ko'] || c.ko;
+};
 
 const CHECKS = [
   { name: '짧은 프롬프트 (16바이트 이하)', code: 'let x = input "> "\nprint "got", x\n',
@@ -134,6 +137,26 @@ const CHECKS = [
   const after = await runAndRead('#runBtn');
   if (after.split('\n')[0].trim() === '첫 줄') console.log('✓ 이전 실행 찌꺼기 없음');
   else { bad++; console.log('✗ 이전 실행 찌꺼기가 첫 줄에 붙음'); console.log('   ' + after.split('\n')[0]); }
+
+  // 레슨 언어 토글이 코드까지 바꾸는가 (손대지 않은 시작 코드일 때만)
+  const lists = LESSONS.find(l => l.id === 'lists').code;
+  // 해시만 바꾸면 문서가 다시 로드되지 않아 boot() 가 안 돈다 → 쿼리를 붙여 새로 연다
+  await page.goto(`http://127.0.0.1:${PORT}/?lessoncheck=1#lesson=lists`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => document.querySelector('#editor').value.includes('push('), { timeout: 20000 });
+  const before = await page.$eval('#editor', e => e.value);
+  await page.click('#lessonLang');
+  await page.waitForTimeout(300);
+  const afterCode = await page.$eval('#editor', e => e.value);
+  const pair = [lists.ko.trim(), lists.en.trim()];
+  if (before.trim() !== afterCode.trim()
+      && pair.includes(before.trim()) && pair.includes(afterCode.trim())) {
+    console.log('✓ 레슨 언어 토글이 코드까지 바꿈');
+  } else {
+    bad++;
+    console.log('✗ 레슨 언어 토글이 코드를 안 바꿈');
+    console.log('   before: ' + before.split('\n')[0]);
+    console.log('   after : ' + afterCode.split('\n')[0]);
+  }
 
   if (jsErrors.length) { bad++; console.log('\n✗ JS 에러:\n   ' + jsErrors.join('\n   ')); }
   else console.log('✓ JS 에러 없음');
